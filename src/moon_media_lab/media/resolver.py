@@ -133,3 +133,62 @@ def resolve_media(source: Path, job_dir: Path) -> ResolvedMedia:
     )
     write_json(job_dir / "media.json", asdict(resolved))
     return resolved
+
+
+@dataclass(frozen=True)
+class AudioChunk:
+    index: int
+    path: str
+    start_sec: float
+    end_sec: float
+
+
+def split_audio(audio_path: Path, chunk_dir: Path, chunk_sec: int) -> list[AudioChunk]:
+    """Split a normalized wav into fixed-length chunks for checkpointed ASR."""
+    ffmpeg = find_tool("ffmpeg")
+    if not ffmpeg:
+        raise MediaProbeFailed(
+            "ffmpeg not found.",
+            hint="Install ffmpeg (e.g. `brew install ffmpeg`) or set MOON_MEDIA_LAB_FFMPEG.",
+        )
+    chunk_dir.mkdir(parents=True, exist_ok=True)
+    pattern = chunk_dir / "chunk-%04d.wav"
+    argv = [
+        ffmpeg,
+        "-y",
+        "-v",
+        "error",
+        "-i",
+        str(audio_path),
+        "-f",
+        "segment",
+        "-segment_time",
+        str(chunk_sec),
+        "-c",
+        "copy",
+        str(pattern),
+    ]
+    completed = subprocess.run(argv, capture_output=True, text=True)
+    if completed.returncode != 0:
+        raise MediaProbeFailed(
+            f"ffmpeg chunking failed for {audio_path}: {completed.stderr.strip()}"
+        )
+
+    chunks: list[AudioChunk] = []
+    cursor = 0.0
+    for index, path in enumerate(sorted(chunk_dir.glob("chunk-*.wav"))):
+        info = probe(path)
+        duration_raw = info.get("format", {}).get("duration")
+        duration = float(duration_raw) if duration_raw else float(chunk_sec)
+        chunks.append(
+            AudioChunk(
+                index=index,
+                path=str(path),
+                start_sec=round(cursor, 2),
+                end_sec=round(cursor + duration, 2),
+            )
+        )
+        cursor += duration
+    if not chunks:
+        raise MediaProbeFailed(f"Chunking produced no output for {audio_path}")
+    return chunks

@@ -9,7 +9,11 @@ from pathlib import Path
 from moon_media_lab import __version__
 from moon_media_lab.errors import MoonMediaError
 from moon_media_lab.paths import get_paths
-from moon_media_lab.pipelines.transcribe import run_transcription
+from moon_media_lab.pipelines.transcribe import (
+    DEFAULT_CHUNK_SEC,
+    resume_transcription,
+    run_transcription,
+)
 from moon_media_lab.tts.registry import get_tts_engine
 
 # Engine name -> importable package that proves the engine group is installed.
@@ -63,7 +67,14 @@ def command_transcribe(args: argparse.Namespace) -> int:
         need_word_timestamps=args.word_timestamps,
         job_base_dir=Path(args.job_dir) if args.job_dir else None,
         model_dir=args.model_dir,
+        chunk_sec=args.chunk_sec,
     )
+    print(job_dir)
+    return 0
+
+
+def command_resume(args: argparse.Namespace) -> int:
+    job_dir = resume_transcription(Path(args.job_dir), model_dir=args.model_dir)
     print(job_dir)
     return 0
 
@@ -104,7 +115,18 @@ def build_parser() -> argparse.ArgumentParser:
     transcribe.add_argument("--word-timestamps", action="store_true")
     transcribe.add_argument("--job-dir", help="Override the jobs root directory")
     transcribe.add_argument("--model-dir", help="Override the engine model path")
+    transcribe.add_argument(
+        "--chunk-sec",
+        type=int,
+        default=DEFAULT_CHUNK_SEC,
+        help="Chunk length in seconds for long media (default: %(default)s)",
+    )
     transcribe.set_defaults(func=command_transcribe)
+
+    resume = subparsers.add_parser("resume", help="Continue an interrupted transcribe job")
+    resume.add_argument("job_dir", help="Path to the jobs/transcribe-... folder")
+    resume.add_argument("--model-dir", help="Override the engine model path")
+    resume.set_defaults(func=command_resume)
 
     tts = subparsers.add_parser("tts", help="Create speech from text using a TTS engine")
     tts.add_argument("text", help="Text or local text file path")

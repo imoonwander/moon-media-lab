@@ -51,6 +51,8 @@ Phase 1 (Chinese ASR) is implemented and validated:
 - language routing (`zh` -> sensevoice, `en`/`mixed` -> faster-whisper pending)
 - project-local ModelScope/HF caches, no writes to global `~/.cache`
 - CLI exit codes and actionable error hints per `docs/cli-v1-spec.md`
+- long media: automatic chunking with checkpoints, progress/ETA, and
+  `moon-media resume <job-dir>` to continue interrupted jobs
 
 Quick start:
 

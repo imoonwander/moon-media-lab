@@ -58,13 +58,25 @@ Goal:
 1-4 hour audio/video with checkpointing
 ```
 
+Status: core done (2026-07-03). Audio longer than `chunk_sec * 1.5`
+(default 10-minute chunks) is split with ffmpeg, transcribed chunk by
+chunk with per-chunk JSON checkpoints, and merged into offset segments.
+`moon-media resume <job-dir>` continues an interrupted job. Progress and
+ETA print to stderr.
+
+Remaining:
+
+- VAD-aligned chunk boundaries (fixed-time cuts can split a sentence)
+- failed chunk retry policy
+- partial transcript.md output while running
+
 Deliverables:
 
-- chunking
-- resume support
+- chunking (done)
+- resume support (done)
 - partial output
 - failed chunk retry
-- progress reporting
+- progress reporting (done)
 
 ## Phase 4: Post-processing
 

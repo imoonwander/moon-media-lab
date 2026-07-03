@@ -38,17 +38,15 @@ class SenseVoiceEngine(ASREngine):
     def __init__(self, model_dir: str | None = None, device: str | None = None) -> None:
         self.model_dir = model_dir or os.environ.get("MOON_MEDIA_LAB_SENSEVOICE_MODEL_DIR")
         self.device = device or os.environ.get("MOON_MEDIA_LAB_DEVICE", "cpu")
+        self._model = None
+        self._modelscope_cache: str | None = None
 
-    def transcribe(self, request: TranscribeRequest) -> TranscriptResult:
-        started = time.perf_counter()
-        audio = Path(request.media.source)
-        if not audio.exists() or not audio.is_file():
-            raise TranscriptionFailed(
-                f"Audio file not found for engine {self.name}: {audio}",
-                hint="Pass a local audio/video file; the media resolver should run first.",
-            )
+    def _load_model(self):
+        """Load the model once per engine instance so chunked runs reuse it."""
+        if self._model is not None:
+            return self._model
 
-        modelscope_cache = _redirect_model_caches()
+        self._modelscope_cache = _redirect_model_caches()
 
         if importlib.util.find_spec("funasr") is None:
             raise EngineNotInstalled(
@@ -56,11 +54,10 @@ class SenseVoiceEngine(ASREngine):
                 hint="Install the engine group: pip install 'moon-media-lab[asr-sensevoice]'",
             )
         from funasr import AutoModel
-        from funasr.utils.postprocess_utils import rich_transcription_postprocess
 
         model_source = self.model_dir or MODEL_ID
         try:
-            model = AutoModel(
+            self._model = AutoModel(
                 model=model_source,
                 vad_model=VAD_MODEL_ID,
                 vad_kwargs={"max_single_segment_time": 30000},
@@ -72,9 +69,23 @@ class SenseVoiceEngine(ASREngine):
         except Exception as exc:  # noqa: BLE001 - funasr raises plain Exception subclasses
             raise ModelDownloadFailed(
                 f"Failed to load SenseVoice model '{model_source}': {exc}",
-                hint=f"Check network access; models cache under {modelscope_cache}",
+                hint=f"Check network access; models cache under {self._modelscope_cache}",
             ) from exc
+        return self._model
 
+    def transcribe(self, request: TranscribeRequest) -> TranscriptResult:
+        started = time.perf_counter()
+        audio = Path(request.media.source)
+        if not audio.exists() or not audio.is_file():
+            raise TranscriptionFailed(
+                f"Audio file not found for engine {self.name}: {audio}",
+                hint="Pass a local audio/video file; the media resolver should run first.",
+            )
+
+        model = self._load_model()
+        from funasr.utils.postprocess_utils import rich_transcription_postprocess
+
+        model_source = self.model_dir or MODEL_ID
         language = LANGUAGE_HINTS.get(request.media.language, "auto")
         try:
             outputs = model.generate(
@@ -123,7 +134,7 @@ class SenseVoiceEngine(ASREngine):
                     "cloud": False,
                     "provider": "local",
                     "device": self.device,
-                    "modelscope_cache": modelscope_cache,
+                    "modelscope_cache": self._modelscope_cache,
                     "raw_text": raw_text,
                 },
             ),

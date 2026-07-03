@@ -1,13 +1,33 @@
 from __future__ import annotations
 
+import json
+import sys
+import time
 from dataclasses import asdict
 from pathlib import Path
 
+from moon_media_lab.asr.base import ASREngine
 from moon_media_lab.asr.registry import get_asr_engine, resolve_engine_name
-from moon_media_lab.errors import InvalidArguments
+from moon_media_lab.errors import InvalidArguments, TranscriptionFailed
 from moon_media_lab.jobs import append_log, new_job_dir, write_json
-from moon_media_lab.media.resolver import resolve_media
-from moon_media_lab.schema import MediaInput, TranscribeRequest
+from moon_media_lab.media.resolver import AudioChunk, resolve_media, split_audio
+from moon_media_lab.schema import (
+    MediaInput,
+    TranscribeRequest,
+    TranscriptMeta,
+    TranscriptResult,
+    TranscriptSegment,
+)
+
+# Audio longer than chunk_sec * 1.5 is transcribed chunk by chunk with checkpoints.
+DEFAULT_CHUNK_SEC = 600
+
+
+def format_ts(seconds: float) -> str:
+    total = int(seconds)
+    hours, remainder = divmod(total, 3600)
+    minutes, secs = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
 def render_transcript_md(result) -> str:
@@ -22,7 +42,7 @@ def render_transcript_md(result) -> str:
     lines.append("")
     for segment in result.segments:
         speaker = f" {segment.speaker}" if segment.speaker else ""
-        lines.append(f"## {segment.start:.2f} - {segment.end:.2f}{speaker}")
+        lines.append(f"## {format_ts(segment.start)} - {format_ts(segment.end)}{speaker}")
         lines.append("")
         lines.append(segment.text)
         lines.append("")
@@ -44,6 +64,169 @@ def render_knowledge_md(result) -> str:
     )
 
 
+def _progress(message: str) -> None:
+    print(message, file=sys.stderr, flush=True)
+
+
+def _chunk_request(chunk_path: str, base: TranscribeRequest) -> TranscribeRequest:
+    return TranscribeRequest(
+        media=MediaInput(source=chunk_path, kind="file", language=base.media.language),
+        mode=base.mode,
+        engine=base.engine,
+        need_diarization=base.need_diarization,
+        need_word_timestamps=base.need_word_timestamps,
+    )
+
+
+def _result_from_dict(data: dict) -> TranscriptResult:
+    return TranscriptResult(
+        meta=TranscriptMeta(**data["meta"]),
+        segments=[TranscriptSegment(**segment) for segment in data["segments"]],
+    )
+
+
+def _run_chunked(
+    engine: ASREngine,
+    request: TranscribeRequest,
+    job_dir: Path,
+    chunks: list[AudioChunk],
+) -> TranscriptResult:
+    """Transcribe chunks sequentially, checkpointing each one to survive restarts."""
+    chunk_dir = job_dir / "chunks"
+    results: list[TranscriptResult] = []
+    total = len(chunks)
+    run_started = time.perf_counter()
+    fresh_runtimes: list[float] = []
+
+    for chunk in chunks:
+        checkpoint = chunk_dir / f"chunk-{chunk.index:04d}.json"
+        window = f"{format_ts(chunk.start_sec)}-{format_ts(chunk.end_sec)}"
+        if checkpoint.exists():
+            results.append(_result_from_dict(json.loads(checkpoint.read_text(encoding="utf-8"))))
+            _progress(f"[chunk {chunk.index + 1}/{total}] {window} restored from checkpoint")
+            continue
+
+        result = engine.transcribe(_chunk_request(chunk.path, request))
+        write_json(checkpoint, result.to_dict())
+        results.append(result)
+        append_log(job_dir, f"chunk {chunk.index + 1}/{total} done runtime={result.meta.runtime_sec}s")
+
+        fresh_runtimes.append(result.meta.runtime_sec or 0.0)
+        remaining = sum(1 for c in chunks[chunk.index + 1 :] if not (chunk_dir / f"chunk-{c.index:04d}.json").exists())
+        eta = (sum(fresh_runtimes) / len(fresh_runtimes)) * remaining if fresh_runtimes else 0.0
+        _progress(
+            f"[chunk {chunk.index + 1}/{total}] {window} done in {result.meta.runtime_sec}s, "
+            f"elapsed {format_ts(time.perf_counter() - run_started)}, eta {format_ts(eta)}"
+        )
+
+    segments: list[TranscriptSegment] = []
+    for chunk, result in zip(chunks, results):
+        for segment in result.segments:
+            # Skip silent/degenerate chunks (e.g. a sub-second tail) in the merge.
+            if not segment.text or segment.text == "(empty transcription)":
+                continue
+            segments.append(
+                TranscriptSegment(
+                    start=round(chunk.start_sec + segment.start, 2),
+                    end=round(min(chunk.start_sec + segment.end, chunk.end_sec), 2),
+                    text=segment.text,
+                    speaker=segment.speaker,
+                    confidence=segment.confidence,
+                )
+            )
+
+    if not results:
+        raise TranscriptionFailed("Chunked transcription produced no results.")
+    last_meta = results[-1].meta
+    extra = dict(last_meta.extra)
+    extra.pop("raw_text", None)
+    extra.update({"chunked": True, "chunk_count": total})
+    return TranscriptResult(
+        meta=TranscriptMeta(
+            engine=last_meta.engine,
+            model=last_meta.model,
+            language=request.media.language,
+            duration_sec=chunks[-1].end_sec,
+            runtime_sec=round(sum(r.meta.runtime_sec or 0.0 for r in results), 2),
+            cost_usd=round(sum(r.meta.cost_usd for r in results), 4),
+            extra=extra,
+        ),
+        segments=segments,
+    )
+
+
+def _load_or_create_chunks(
+    job_dir: Path, audio_path: str, chunk_sec: int
+) -> list[AudioChunk]:
+    manifest_path = job_dir / "chunks" / "manifest.json"
+    if manifest_path.exists():
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        return [AudioChunk(**chunk) for chunk in data["chunks"]]
+    chunks = split_audio(Path(audio_path), job_dir / "chunks", chunk_sec)
+    write_json(
+        manifest_path,
+        {"chunk_sec": chunk_sec, "chunks": [asdict(chunk) for chunk in chunks]},
+    )
+    return chunks
+
+
+def _execute(
+    request: TranscribeRequest,
+    job_dir: Path,
+    *,
+    chunk_sec: int,
+    model_dir: str | None,
+) -> Path:
+    engine_source = request.media.source
+    resolved_engine = request.engine
+    duration_sec: float | None = None
+
+    if resolved_engine != "mock":
+        if request.media.kind == "url":
+            raise InvalidArguments(
+                "URL ingestion is not implemented yet.",
+                hint="Download the media locally first, then pass the file path.",
+            )
+        if request.media.kind == "text":
+            raise InvalidArguments(
+                f"--kind text is only supported by the mock engine, not {resolved_engine}."
+            )
+        media_json = job_dir / "media.json"
+        if media_json.exists():
+            media_data = json.loads(media_json.read_text(encoding="utf-8"))
+            engine_source = media_data["audio_path"]
+            duration_sec = media_data.get("duration_sec")
+        else:
+            media = resolve_media(Path(request.media.source), job_dir)
+            engine_source = media.audio_path
+            duration_sec = media.duration_sec
+            append_log(
+                job_dir,
+                f"media resolved: duration={media.duration_sec}s extracted={media.extracted}",
+            )
+
+    engine = get_asr_engine(resolved_engine, request.media.language, model_dir=model_dir)
+
+    if resolved_engine != "mock" and duration_sec and duration_sec > chunk_sec * 1.5:
+        chunks = _load_or_create_chunks(job_dir, engine_source, chunk_sec)
+        append_log(job_dir, f"chunked run: {len(chunks)} chunks of {chunk_sec}s")
+        _progress(f"long media ({format_ts(duration_sec)}): {len(chunks)} chunks of {chunk_sec}s")
+        result = _run_chunked(engine, request, job_dir, chunks)
+    else:
+        result = engine.transcribe(_chunk_request(engine_source, request))
+
+    write_json(job_dir / "transcript.raw.json", result.to_dict())
+    (job_dir / "transcript.md").write_text(render_transcript_md(result), encoding="utf-8")
+    if request.mode in {"knowledge", "skill", "english-study"}:
+        (job_dir / "knowledge.md").write_text(render_knowledge_md(result), encoding="utf-8")
+    append_log(
+        job_dir,
+        f"finished engine={result.meta.engine} model={result.meta.model} "
+        f"runtime_sec={result.meta.runtime_sec}",
+    )
+    return job_dir
+
+
 def run_transcription(
     source: str,
     *,
@@ -55,6 +238,7 @@ def run_transcription(
     need_word_timestamps: bool = False,
     job_base_dir: Path | None = None,
     model_dir: str | None = None,
+    chunk_sec: int = DEFAULT_CHUNK_SEC,
 ) -> Path:
     resolved_engine = resolve_engine_name(engine_name, language)
     request = TranscribeRequest(
@@ -67,41 +251,32 @@ def run_transcription(
     job_dir = new_job_dir("transcribe", base_dir=job_base_dir)
     append_log(job_dir, f"created job for {source} engine={resolved_engine}")
     write_json(job_dir / "input.json", asdict(request))
+    return _execute(request, job_dir, chunk_sec=chunk_sec, model_dir=model_dir)
 
-    engine_source = source
-    if resolved_engine != "mock":
-        if kind == "url":
-            raise InvalidArguments(
-                "URL ingestion is not implemented yet.",
-                hint="Download the media locally first, then pass the file path.",
-            )
-        if kind == "text":
-            raise InvalidArguments(
-                f"--kind text is only supported by the mock engine, not {resolved_engine}."
-            )
-        media = resolve_media(Path(source), job_dir)
-        engine_source = media.audio_path
-        append_log(
-            job_dir,
-            f"media resolved: duration={media.duration_sec}s extracted={media.extracted}",
-        )
-        request = TranscribeRequest(
-            media=MediaInput(source=engine_source, kind="file", language=language),
-            mode=mode,
-            engine=resolved_engine,
-            need_diarization=need_diarization,
-            need_word_timestamps=need_word_timestamps,
-        )
 
-    engine = get_asr_engine(resolved_engine, language, model_dir=model_dir)
-    result = engine.transcribe(request)
-    write_json(job_dir / "transcript.raw.json", result.to_dict())
-    (job_dir / "transcript.md").write_text(render_transcript_md(result), encoding="utf-8")
-    if mode in {"knowledge", "skill", "english-study"}:
-        (job_dir / "knowledge.md").write_text(render_knowledge_md(result), encoding="utf-8")
-    append_log(
-        job_dir,
-        f"finished engine={result.meta.engine} model={result.meta.model} "
-        f"runtime_sec={result.meta.runtime_sec}",
+def resume_transcription(job_dir: Path, *, model_dir: str | None = None) -> Path:
+    """Continue an interrupted job from its per-chunk checkpoints."""
+    input_json = job_dir / "input.json"
+    if not input_json.exists():
+        raise InvalidArguments(
+            f"Not a job directory (missing input.json): {job_dir}",
+            hint="Pass the jobs/transcribe-... folder printed when the job started.",
+        )
+    if (job_dir / "transcript.raw.json").exists():
+        _progress(f"job already finished: {job_dir}")
+        return job_dir
+
+    data = json.loads(input_json.read_text(encoding="utf-8"))
+    request = TranscribeRequest(
+        media=MediaInput(**data["media"]),
+        mode=data["mode"],
+        engine=data["engine"],
+        need_diarization=data["need_diarization"],
+        need_word_timestamps=data["need_word_timestamps"],
     )
-    return job_dir
+    manifest_path = job_dir / "chunks" / "manifest.json"
+    chunk_sec = DEFAULT_CHUNK_SEC
+    if manifest_path.exists():
+        chunk_sec = json.loads(manifest_path.read_text(encoding="utf-8"))["chunk_sec"]
+    append_log(job_dir, "resuming job")
+    return _execute(request, job_dir, chunk_sec=chunk_sec, model_dir=model_dir)
