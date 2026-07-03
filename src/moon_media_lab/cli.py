@@ -57,8 +57,7 @@ def command_doctor(args: argparse.Namespace) -> int:
 
 
 def command_transcribe(args: argparse.Namespace) -> int:
-    job_dir = run_transcription(
-        args.source,
+    transcribe_kwargs = dict(
         mode=args.mode,
         language=args.language,
         engine_name=args.engine,
@@ -70,6 +69,14 @@ def command_transcribe(args: argparse.Namespace) -> int:
         chunk_sec=args.chunk_sec,
         llm=args.llm,
     )
+    if args.playlist:
+        from moon_media_lab.pipelines.playlist import run_playlist
+
+        job_dirs = run_playlist(args.source, items=args.playlist_items, **transcribe_kwargs)
+        for job_dir in job_dirs:
+            print(job_dir)
+        return 0 if job_dirs else 1
+    job_dir = run_transcription(args.source, **transcribe_kwargs)
     print(job_dir)
     return 0
 
@@ -99,6 +106,32 @@ def command_process(args: argparse.Namespace) -> int:
     for output in outputs:
         print(output)
     return 0
+
+
+def command_models(args: argparse.Namespace) -> int:
+    from moon_media_lab import models_cli
+
+    if args.models_command == "list":
+        rows = models_cli.list_models()
+        if not rows:
+            print("no models downloaded yet")
+        for name, size in rows:
+            print(f"{size:>8}  {name}")
+        return 0
+    if args.models_command == "download":
+        if args.name == "sensevoice":
+            path = models_cli.download_sensevoice()
+        else:
+            path = models_cli.download_whisper_model(args.name, mirror=args.mirror)
+        print(path)
+        return 0
+    if args.models_command == "prune":
+        removed = models_cli.prune_models()
+        for entry in removed:
+            print(f"removed {entry}")
+        print(f"{len(removed)} stale download file(s) removed")
+        return 0
+    raise InvalidArguments("Unknown models subcommand")
 
 
 def command_tts(args: argparse.Namespace) -> int:
@@ -144,6 +177,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Chunk length in seconds for long media (default: %(default)s)",
     )
     transcribe.add_argument("--llm", default="auto", help="LLM provider for post-processing")
+    transcribe.add_argument(
+        "--playlist", action="store_true", help="Transcribe every entry of a playlist URL"
+    )
+    transcribe.add_argument(
+        "--playlist-items", help="Entry selection like 1-5 or 1,3,7 (yt-dlp syntax)"
+    )
     transcribe.set_defaults(func=command_transcribe)
 
     resume = subparsers.add_parser("resume", help="Continue an interrupted transcribe job")
@@ -166,6 +205,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     process.add_argument("--llm", default="auto", help="LLM provider (claude-cli|mock)")
     process.set_defaults(func=command_process)
+
+    models = subparsers.add_parser("models", help="Manage local ASR models")
+    models_sub = models.add_subparsers(dest="models_command", required=True)
+    models_sub.add_parser("list", help="List downloaded models and sizes")
+    models_download = models_sub.add_parser("download", help="Download a model")
+    models_download.add_argument(
+        "name", help="Model name: sensevoice, tiny.en, small, large-v3-turbo, ..."
+    )
+    models_download.add_argument(
+        "--mirror", action="store_true", help="Use hf-mirror.com instead of huggingface.co"
+    )
+    models_sub.add_parser("prune", help="Remove interrupted download leftovers")
+    models.set_defaults(func=command_models)
 
     tts = subparsers.add_parser("tts", help="Create speech from text using a TTS engine")
     tts.add_argument("text", help="Text or local text file path")

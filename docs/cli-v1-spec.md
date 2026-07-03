@@ -91,15 +91,17 @@ whether it left the machine.
 
 ### models
 
-Future command:
-
 ```bash
 moon-media models list
 moon-media models download sensevoice
+moon-media models download large-v3-turbo --mirror
 moon-media models prune
 ```
 
-Do not implement until first ASR engine works.
+`download` fetches whisper models file-by-file with HTTP-Range resume;
+`--mirror` (or `MOON_MEDIA_LAB_HF_ENDPOINT`) switches to hf-mirror.com.
+`sensevoice` downloads via ModelScope. `prune` removes interrupted
+download leftovers (`*.part`, `*.incomplete`).
 
 ## Job Folder
 
@@ -121,8 +123,16 @@ audio.wav
 knowledge.md
 english-study.md
 skill-draft.md
-segments.srt
-segments.vtt
+transcript.clean.md
+```
+
+`segments.srt` and `segments.vtt` are generated automatically for real
+(non-mock) engine runs.
+
+Playlist mode creates one job per entry:
+
+```bash
+moon-media transcribe <playlist-url> --playlist --playlist-items 1-5
 ```
 
 ## Exit Codes

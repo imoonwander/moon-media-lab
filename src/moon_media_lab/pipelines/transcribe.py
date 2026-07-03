@@ -249,6 +249,11 @@ def _execute(
 
     write_json(job_dir / "transcript.raw.json", result.to_dict())
     (job_dir / "transcript.md").write_text(render_transcript_md(result), encoding="utf-8")
+    if resolved_engine != "mock" and result.segments:
+        from moon_media_lab.pipelines.subtitles import render_srt, render_vtt
+
+        (job_dir / "segments.srt").write_text(render_srt(result), encoding="utf-8")
+        (job_dir / "segments.vtt").write_text(render_vtt(result), encoding="utf-8")
     if request.mode in {"knowledge", "skill", "english-study"}:
         # Transcript artifacts are already on disk: if the LLM step fails,
         # `moon-media process <job-dir>` can redo it without re-transcribing.

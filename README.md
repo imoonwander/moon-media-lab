@@ -55,6 +55,11 @@ Phase 1 (Chinese ASR) is implemented and validated:
 - CLI exit codes and actionable error hints per `docs/cli-v1-spec.md`
 - long media: automatic chunking with checkpoints, progress/ETA, and
   `moon-media resume <job-dir>` to continue interrupted jobs
+- playlist mode: `--playlist [--playlist-items 1-5]` transcribes every
+  entry of a multi-part video or playlist, one job per entry
+- subtitles: `segments.srt` / `segments.vtt` generated for every job
+- `moon-media models list|download|prune` with `--mirror` support and
+  resumable downloads (Douyin direct downloads work without cookies)
 - LLM post-processing via provider adapters (`claude-cli` today, `mock`
   for tests): `moon-media process <job-dir> --mode knowledge --clean`
   turns a finished transcript into knowledge notes and a cleaned

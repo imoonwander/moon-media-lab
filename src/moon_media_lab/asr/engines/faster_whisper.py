@@ -47,7 +47,14 @@ class FasterWhisperEngine(ASREngine):
         from faster_whisper import WhisperModel
 
         download_root = str(get_paths().models / "asr" / "faster-whisper")
-        source = self.model_dir or self.model_name
+        # `moon-media models download` places models in a plain local dir.
+        local_dir = Path(download_root) / self.model_name
+        if self.model_dir:
+            source = self.model_dir
+        elif (local_dir / "model.bin").exists():
+            source = str(local_dir)
+        else:
+            source = self.model_name
         try:
             self._model = WhisperModel(
                 source,
