@@ -10,6 +10,7 @@ from pathlib import Path
 import time
 
 from moon_media_lab.errors import EngineNotInstalled, MediaProbeFailed
+from moon_media_lab.media.douyin import is_douyin_url
 
 OUTPUT_TEMPLATE = "%(title).80s-%(id)s.%(ext)s"
 MAX_ATTEMPTS = 3
@@ -127,11 +128,18 @@ def download_media(url: str, downloads_dir: Path) -> Path:
     # Sites rate-limit bursts (e.g. Bilibili HTTP 412); brief retries absorb them.
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
-            path = (
-                _download_via_binary(binary, url, downloads_dir)
-                if binary
-                else _download_via_module(url, downloads_dir)
-            )
+            if is_douyin_url(url):
+                # yt-dlp's Douyin extractor is broken upstream (desktop API
+                # requires fresh cookies); the mobile share page path works.
+                from moon_media_lab.media.douyin import download_douyin
+
+                path = download_douyin(url, downloads_dir)
+            else:
+                path = (
+                    _download_via_binary(binary, url, downloads_dir)
+                    if binary
+                    else _download_via_module(url, downloads_dir)
+                )
             break
         except MediaProbeFailed:
             if attempt == MAX_ATTEMPTS:
