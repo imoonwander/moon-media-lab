@@ -7,7 +7,7 @@ from pathlib import Path
 
 from moon_media_lab.asr.base import ASREngine
 from moon_media_lab.errors import EngineNotInstalled, ModelDownloadFailed, TranscriptionFailed
-from moon_media_lab.paths import get_paths
+from moon_media_lab.paths import redirect_model_caches
 from moon_media_lab.schema import (
     TranscribeRequest,
     TranscriptMeta,
@@ -20,16 +20,6 @@ VAD_MODEL_ID = "fsmn-vad"
 
 # SenseVoice language hints; anything else falls back to auto detection.
 LANGUAGE_HINTS = {"zh": "zh", "en": "en"}
-
-
-def _redirect_model_caches() -> str:
-    """Point ModelScope/HF caches at the project cache before any heavy import."""
-    cache = get_paths().cache
-    modelscope_cache = os.environ.setdefault("MODELSCOPE_CACHE", str(cache / "modelscope"))
-    os.environ.setdefault("HF_HOME", str(cache / "huggingface"))
-    os.environ.setdefault("TORCH_HOME", str(cache / "torch"))
-    os.environ.setdefault("XDG_CACHE_HOME", str(cache / "xdg"))
-    return modelscope_cache
 
 
 class SenseVoiceEngine(ASREngine):
@@ -46,7 +36,7 @@ class SenseVoiceEngine(ASREngine):
         if self._model is not None:
             return self._model
 
-        self._modelscope_cache = _redirect_model_caches()
+        self._modelscope_cache = redirect_model_caches()
 
         if importlib.util.find_spec("funasr") is None:
             raise EngineNotInstalled(

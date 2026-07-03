@@ -10,7 +10,9 @@ from moon_media_lab.asr.base import ASREngine
 from moon_media_lab.asr.registry import get_asr_engine, resolve_engine_name
 from moon_media_lab.errors import InvalidArguments, TranscriptionFailed
 from moon_media_lab.jobs import append_log, new_job_dir, write_json
+from moon_media_lab.media.downloader import download_media, is_url
 from moon_media_lab.media.resolver import AudioChunk, resolve_media, split_audio
+from moon_media_lab.paths import get_paths
 from moon_media_lab.schema import (
     MediaInput,
     TranscribeRequest,
@@ -211,11 +213,6 @@ def _execute(
     duration_sec: float | None = None
 
     if resolved_engine != "mock":
-        if request.media.kind == "url":
-            raise InvalidArguments(
-                "URL ingestion is not implemented yet.",
-                hint="Download the media locally first, then pass the file path.",
-            )
         if request.media.kind == "text":
             raise InvalidArguments(
                 f"--kind text is only supported by the mock engine, not {resolved_engine}."
@@ -226,7 +223,13 @@ def _execute(
             engine_source = media_data["audio_path"]
             duration_sec = media_data.get("duration_sec")
         else:
-            media = resolve_media(Path(request.media.source), job_dir)
+            local_source = Path(request.media.source)
+            if request.media.kind == "url":
+                _progress(f"downloading {request.media.source} ...")
+                local_source = download_media(request.media.source, get_paths().downloads)
+                append_log(job_dir, f"downloaded to {local_source}")
+                _progress(f"downloaded: {local_source.name}")
+            media = resolve_media(local_source, job_dir)
             engine_source = media.audio_path
             duration_sec = media.duration_sec
             append_log(
@@ -275,6 +278,8 @@ def run_transcription(
     chunk_sec: int = DEFAULT_CHUNK_SEC,
     llm: str = "auto",
 ) -> Path:
+    if kind == "file" and is_url(source):
+        kind = "url"
     resolved_engine = resolve_engine_name(engine_name, language)
     request = TranscribeRequest(
         media=MediaInput(source=source, kind=kind, language=language),

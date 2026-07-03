@@ -47,8 +47,10 @@ Use `.env.example` as the default local configuration template.
 Phase 1 (Chinese ASR) is implemented and validated:
 
 - SenseVoice/FunASR engine behind the ASR adapter (`--engine sensevoice`)
+- faster-whisper engine for English (`large-v3-turbo`, per-segment timestamps)
+- URL ingestion: `moon-media transcribe <url>` downloads via yt-dlp first
 - ffmpeg media probe and 16 kHz mono wav extraction
-- language routing (`zh` -> sensevoice, `en`/`mixed` -> faster-whisper pending)
+- language routing (`zh` -> sensevoice, `en`/`mixed` -> faster-whisper)
 - project-local ModelScope/HF caches, no writes to global `~/.cache`
 - CLI exit codes and actionable error hints per `docs/cli-v1-spec.md`
 - long media: automatic chunking with checkpoints, progress/ETA, and

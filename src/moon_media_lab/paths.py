@@ -23,6 +23,19 @@ class LabPaths:
             path.mkdir(parents=True, exist_ok=True)
 
 
+def redirect_model_caches() -> str:
+    """Point ModelScope/HF/torch caches at the project cache before heavy imports.
+
+    Returns the ModelScope cache path for logging."""
+    cache = get_paths().cache
+    modelscope_cache = os.environ.setdefault("MODELSCOPE_CACHE", str(cache / "modelscope"))
+    os.environ.setdefault("HF_HOME", str(cache / "huggingface"))
+    os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(cache / "huggingface" / "hub"))
+    os.environ.setdefault("TORCH_HOME", str(cache / "torch"))
+    os.environ.setdefault("XDG_CACHE_HOME", str(cache / "xdg"))
+    return modelscope_cache
+
+
 def get_paths() -> LabPaths:
     root = project_root()
     home = Path(os.environ.get("MOON_MEDIA_LAB_HOME", root)).expanduser().resolve()

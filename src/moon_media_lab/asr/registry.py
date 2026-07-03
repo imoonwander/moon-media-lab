@@ -43,7 +43,11 @@ def get_asr_engine(
         from moon_media_lab.asr.engines.sensevoice import SenseVoiceEngine
 
         return SenseVoiceEngine(model_dir=model_dir)
+    if resolved == "faster-whisper":
+        from moon_media_lab.asr.engines.faster_whisper import FasterWhisperEngine
+
+        return FasterWhisperEngine(model_dir=model_dir)
     raise EngineNotInstalled(
         f"ASR engine is not implemented yet: {resolved}",
-        hint="sensevoice and mock are available today; faster-whisper arrives in Phase 2.",
+        hint="Available engines: sensevoice, faster-whisper, mock.",
     )

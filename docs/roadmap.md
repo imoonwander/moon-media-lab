@@ -37,6 +37,15 @@ Deliverables:
 
 ## Phase 2: English ASR
 
+Status: done (2026-07-03). faster-whisper adapter with per-segment
+timestamps and confidence, project-local model storage under
+`models/asr/faster-whisper`, `en`/`mixed` routing. Model/compute
+configurable via `MOON_MEDIA_LAB_WHISPER_MODEL` / `_COMPUTE`
+(default `large-v3-turbo` / `int8`). URL ingestion via yt-dlp landed
+in the same release: `moon-media transcribe <url>` auto-detects
+http(s), downloads audio to `downloads/`, cookies configurable for
+bot-checked sites.
+
 Engine:
 
 ```text
@@ -45,10 +54,10 @@ faster-whisper large-v3-turbo
 
 Deliverables:
 
-- faster-whisper adapter
-- language route config
-- English sample test
-- English study post-processor draft
+- faster-whisper adapter (done)
+- language route config (done)
+- English sample test (done)
+- English study post-processor draft (done in Phase 4)
 
 ## Phase 3: Long Media
 
