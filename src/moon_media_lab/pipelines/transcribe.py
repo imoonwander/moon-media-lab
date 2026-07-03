@@ -21,6 +21,7 @@ from moon_media_lab.schema import (
 
 # Audio longer than chunk_sec * 1.5 is transcribed chunk by chunk with checkpoints.
 DEFAULT_CHUNK_SEC = 600
+CHUNK_MAX_ATTEMPTS = 3
 
 
 def format_ts(seconds: float) -> str:
@@ -85,40 +86,33 @@ def _result_from_dict(data: dict) -> TranscriptResult:
     )
 
 
-def _run_chunked(
+def _transcribe_with_retry(
     engine: ASREngine,
     request: TranscribeRequest,
     job_dir: Path,
-    chunks: list[AudioChunk],
+    label: str,
 ) -> TranscriptResult:
-    """Transcribe chunks sequentially, checkpointing each one to survive restarts."""
-    chunk_dir = job_dir / "chunks"
-    results: list[TranscriptResult] = []
-    total = len(chunks)
-    run_started = time.perf_counter()
-    fresh_runtimes: list[float] = []
+    last_error: Exception | None = None
+    for attempt in range(1, CHUNK_MAX_ATTEMPTS + 1):
+        try:
+            return engine.transcribe(request)
+        except TranscriptionFailed as exc:
+            last_error = exc
+            append_log(job_dir, f"{label} attempt {attempt}/{CHUNK_MAX_ATTEMPTS} failed: {exc}")
+            if attempt < CHUNK_MAX_ATTEMPTS:
+                _progress(f"{label} failed (attempt {attempt}), retrying...")
+                time.sleep(2)
+    raise TranscriptionFailed(
+        f"{label} failed after {CHUNK_MAX_ATTEMPTS} attempts: {last_error}",
+        hint="Fix the cause and rerun `moon-media resume <job-dir>`; finished chunks are kept.",
+    ) from last_error
 
-    for chunk in chunks:
-        checkpoint = chunk_dir / f"chunk-{chunk.index:04d}.json"
-        window = f"{format_ts(chunk.start_sec)}-{format_ts(chunk.end_sec)}"
-        if checkpoint.exists():
-            results.append(_result_from_dict(json.loads(checkpoint.read_text(encoding="utf-8"))))
-            _progress(f"[chunk {chunk.index + 1}/{total}] {window} restored from checkpoint")
-            continue
 
-        result = engine.transcribe(_chunk_request(chunk.path, request))
-        write_json(checkpoint, result.to_dict())
-        results.append(result)
-        append_log(job_dir, f"chunk {chunk.index + 1}/{total} done runtime={result.meta.runtime_sec}s")
-
-        fresh_runtimes.append(result.meta.runtime_sec or 0.0)
-        remaining = sum(1 for c in chunks[chunk.index + 1 :] if not (chunk_dir / f"chunk-{c.index:04d}.json").exists())
-        eta = (sum(fresh_runtimes) / len(fresh_runtimes)) * remaining if fresh_runtimes else 0.0
-        _progress(
-            f"[chunk {chunk.index + 1}/{total}] {window} done in {result.meta.runtime_sec}s, "
-            f"elapsed {format_ts(time.perf_counter() - run_started)}, eta {format_ts(eta)}"
-        )
-
+def _merge_results(
+    chunks: list[AudioChunk],
+    results: list[TranscriptResult],
+    request: TranscribeRequest,
+) -> TranscriptResult:
     segments: list[TranscriptSegment] = []
     for chunk, result in zip(chunks, results):
         for segment in result.segments:
@@ -135,24 +129,73 @@ def _run_chunked(
                 )
             )
 
-    if not results:
-        raise TranscriptionFailed("Chunked transcription produced no results.")
     last_meta = results[-1].meta
     extra = dict(last_meta.extra)
     extra.pop("raw_text", None)
-    extra.update({"chunked": True, "chunk_count": total})
+    extra.update({"chunked": True, "chunk_count": len(chunks), "chunks_done": len(results)})
     return TranscriptResult(
         meta=TranscriptMeta(
             engine=last_meta.engine,
             model=last_meta.model,
             language=request.media.language,
-            duration_sec=chunks[-1].end_sec,
+            duration_sec=chunks[len(results) - 1].end_sec,
             runtime_sec=round(sum(r.meta.runtime_sec or 0.0 for r in results), 2),
             cost_usd=round(sum(r.meta.cost_usd for r in results), 4),
             extra=extra,
         ),
         segments=segments,
     )
+
+
+def _run_chunked(
+    engine: ASREngine,
+    request: TranscribeRequest,
+    job_dir: Path,
+    chunks: list[AudioChunk],
+) -> TranscriptResult:
+    """Transcribe chunks sequentially, checkpointing each one to survive restarts."""
+    chunk_dir = job_dir / "chunks"
+    partial_md = job_dir / "transcript.partial.md"
+    results: list[TranscriptResult] = []
+    total = len(chunks)
+    run_started = time.perf_counter()
+    fresh_runtimes: list[float] = []
+
+    for chunk in chunks:
+        checkpoint = chunk_dir / f"chunk-{chunk.index:04d}.json"
+        window = f"{format_ts(chunk.start_sec)}-{format_ts(chunk.end_sec)}"
+        if checkpoint.exists():
+            results.append(_result_from_dict(json.loads(checkpoint.read_text(encoding="utf-8"))))
+            _progress(f"[chunk {chunk.index + 1}/{total}] {window} restored from checkpoint")
+            continue
+
+        result = _transcribe_with_retry(
+            engine,
+            _chunk_request(chunk.path, request),
+            job_dir,
+            f"chunk {chunk.index + 1}/{total}",
+        )
+        write_json(checkpoint, result.to_dict())
+        results.append(result)
+        append_log(job_dir, f"chunk {chunk.index + 1}/{total} done runtime={result.meta.runtime_sec}s")
+
+        partial_md.write_text(
+            render_transcript_md(_merge_results(chunks, results, request)), encoding="utf-8"
+        )
+
+        fresh_runtimes.append(result.meta.runtime_sec or 0.0)
+        remaining = total - len(results)
+        eta = (sum(fresh_runtimes) / len(fresh_runtimes)) * remaining if fresh_runtimes else 0.0
+        _progress(
+            f"[chunk {chunk.index + 1}/{total}] {window} done in {result.meta.runtime_sec}s, "
+            f"elapsed {format_ts(time.perf_counter() - run_started)}, eta {format_ts(eta)}"
+        )
+
+    if not results:
+        raise TranscriptionFailed("Chunked transcription produced no results.")
+    merged = _merge_results(chunks, results, request)
+    partial_md.unlink(missing_ok=True)
+    return merged
 
 
 def _load_or_create_chunks(

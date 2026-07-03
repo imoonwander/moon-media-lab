@@ -143,8 +143,54 @@ class AudioChunk:
     end_sec: float
 
 
+def detect_silences(audio_path: Path) -> list[tuple[float, float]]:
+    """Return (start, end) silence intervals via ffmpeg silencedetect."""
+    ffmpeg = find_tool("ffmpeg")
+    if not ffmpeg:
+        return []
+    argv = [
+        ffmpeg,
+        "-i",
+        str(audio_path),
+        "-af",
+        "silencedetect=noise=-35dB:d=0.4",
+        "-f",
+        "null",
+        "-",
+    ]
+    completed = subprocess.run(argv, capture_output=True, text=True)
+    silences: list[tuple[float, float]] = []
+    start: float | None = None
+    for line in completed.stderr.splitlines():
+        if "silence_start:" in line:
+            start = float(line.split("silence_start:")[1].strip().split()[0])
+        elif "silence_end:" in line and start is not None:
+            end = float(line.split("silence_end:")[1].strip().split()[0])
+            silences.append((start, end))
+            start = None
+    return silences
+
+
+def plan_cut_times(
+    duration_sec: float, chunk_sec: int, silences: list[tuple[float, float]]
+) -> list[float]:
+    """Pick cut points near each chunk boundary, preferring silence midpoints."""
+    window = max(5.0, min(60.0, chunk_sec * 0.1))
+    midpoints = [(s + e) / 2 for s, e in silences]
+    cuts: list[float] = []
+    target = float(chunk_sec)
+    while target < duration_sec - 1.0:
+        candidates = [m for m in midpoints if abs(m - target) <= window]
+        floor = cuts[-1] + 1.0 if cuts else 1.0
+        candidates = [m for m in candidates if m > floor]
+        cut = min(candidates, key=lambda m: abs(m - target)) if candidates else target
+        cuts.append(round(cut, 3))
+        target = cut + chunk_sec
+    return cuts
+
+
 def split_audio(audio_path: Path, chunk_dir: Path, chunk_sec: int) -> list[AudioChunk]:
-    """Split a normalized wav into fixed-length chunks for checkpointed ASR."""
+    """Split a normalized wav into chunks aligned to silence for checkpointed ASR."""
     ffmpeg = find_tool("ffmpeg")
     if not ffmpeg:
         raise MediaProbeFailed(
@@ -153,6 +199,16 @@ def split_audio(audio_path: Path, chunk_dir: Path, chunk_sec: int) -> list[Audio
         )
     chunk_dir.mkdir(parents=True, exist_ok=True)
     pattern = chunk_dir / "chunk-%04d.wav"
+
+    info = probe(audio_path)
+    duration_raw = info.get("format", {}).get("duration")
+    duration_sec = float(duration_raw) if duration_raw else 0.0
+    cut_times = plan_cut_times(duration_sec, chunk_sec, detect_silences(audio_path))
+
+    if cut_times:
+        segmenting = ["-segment_times", ",".join(str(t) for t in cut_times)]
+    else:
+        segmenting = ["-segment_time", str(chunk_sec)]
     argv = [
         ffmpeg,
         "-y",
@@ -162,8 +218,7 @@ def split_audio(audio_path: Path, chunk_dir: Path, chunk_sec: int) -> list[Audio
         str(audio_path),
         "-f",
         "segment",
-        "-segment_time",
-        str(chunk_sec),
+        *segmenting,
         "-c",
         "copy",
         str(pattern),
