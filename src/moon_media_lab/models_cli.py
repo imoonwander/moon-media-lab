@@ -133,6 +133,19 @@ def download_sensevoice() -> Path:
     return Path(modelscope_cache)
 
 
+def download_paraformer() -> Path:
+    """Download the diarization stack by loading it once via FunASR.
+
+    FunASR resolves its model aliases itself, so a one-off load is the
+    reliable way to fetch paraformer-zh + vad + punc + cam++ together."""
+    modelscope_cache = redirect_model_caches()
+    from moon_media_lab.asr.engines.paraformer import ParaformerEngine
+
+    _progress("downloading paraformer-zh + fsmn-vad + ct-punc + cam++ via ModelScope")
+    ParaformerEngine()._load_model()
+    return Path(modelscope_cache)
+
+
 def _dir_size(path: Path) -> int:
     return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
 

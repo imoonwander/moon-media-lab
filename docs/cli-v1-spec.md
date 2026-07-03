@@ -100,8 +100,20 @@ moon-media models prune
 
 `download` fetches whisper models file-by-file with HTTP-Range resume;
 `--mirror` (or `MOON_MEDIA_LAB_HF_ENDPOINT`) switches to hf-mirror.com.
-`sensevoice` downloads via ModelScope. `prune` removes interrupted
-download leftovers (`*.part`, `*.incomplete`).
+`sensevoice` and `paraformer` (diarization stack) download via
+ModelScope. `prune` removes interrupted download leftovers
+(`*.part`, `*.incomplete`).
+
+### Diarization
+
+```bash
+moon-media transcribe interview.m4a --language zh --diarization
+```
+
+Routes to the `paraformer` engine (paraformer-zh + fsmn-vad + ct-punc
++ CAM++); segments carry `SPEAKER_NN` labels. Diarization runs skip
+chunking so speaker ids stay globally consistent. English diarization
+is not supported yet; the flag is ignored with a warning.
 
 ## Job Folder
 

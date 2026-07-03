@@ -7,7 +7,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from moon_media_lab.asr.base import ASREngine
-from moon_media_lab.asr.registry import get_asr_engine, resolve_engine_name
+from moon_media_lab.asr.registry import DIARIZATION_ENGINES, get_asr_engine, resolve_engine_name
 from moon_media_lab.errors import InvalidArguments, TranscriptionFailed
 from moon_media_lab.jobs import append_log, new_job_dir, write_json
 from moon_media_lab.media.downloader import download_media, is_url
@@ -239,7 +239,16 @@ def _execute(
 
     engine = get_asr_engine(resolved_engine, request.media.language, model_dir=model_dir)
 
-    if resolved_engine != "mock" and duration_sec and duration_sec > chunk_sec * 1.5:
+    if request.need_diarization and duration_sec and duration_sec > chunk_sec * 1.5:
+        # Chunk-local speaker ids cannot be aligned across chunks; let the
+        # engine's internal VAD handle the whole file instead.
+        _progress("diarization run: skipping chunking (speaker ids must stay global)")
+    if (
+        resolved_engine != "mock"
+        and not request.need_diarization
+        and duration_sec
+        and duration_sec > chunk_sec * 1.5
+    ):
         chunks = _load_or_create_chunks(job_dir, engine_source, chunk_sec)
         append_log(job_dir, f"chunked run: {len(chunks)} chunks of {chunk_sec}s")
         _progress(f"long media ({format_ts(duration_sec)}): {len(chunks)} chunks of {chunk_sec}s")
@@ -286,6 +295,16 @@ def run_transcription(
     if kind == "file" and is_url(source):
         kind = "url"
     resolved_engine = resolve_engine_name(engine_name, language)
+    if need_diarization and resolved_engine not in DIARIZATION_ENGINES:
+        if language == "zh" and engine_name.lower().strip() == "auto":
+            resolved_engine = "paraformer"
+            _progress("diarization requested: routing zh to paraformer+cam++")
+        else:
+            _progress(
+                f"warning: engine {resolved_engine} cannot label speakers; "
+                "diarization currently needs --language zh (paraformer). Continuing without."
+            )
+            need_diarization = False
     request = TranscribeRequest(
         media=MediaInput(source=source, kind=kind, language=language),
         mode=mode,

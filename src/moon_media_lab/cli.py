@@ -20,6 +20,7 @@ from moon_media_lab.tts.registry import get_tts_engine
 # Checked with find_spec so doctor never triggers heavy ML imports.
 ENGINE_PACKAGES = {
     "sensevoice": "funasr",
+    "paraformer": "funasr",
     "faster-whisper": "faster_whisper",
     "mock": None,
 }
@@ -121,6 +122,8 @@ def command_models(args: argparse.Namespace) -> int:
     if args.models_command == "download":
         if args.name == "sensevoice":
             path = models_cli.download_sensevoice()
+        elif args.name == "paraformer":
+            path = models_cli.download_paraformer()
         else:
             path = models_cli.download_whisper_model(args.name, mirror=args.mirror)
         print(path)

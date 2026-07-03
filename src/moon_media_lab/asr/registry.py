@@ -13,7 +13,10 @@ LANGUAGE_ROUTES = {
     "mixed": "faster-whisper",
 }
 
-KNOWN_ENGINES = {"mock", "sensevoice", "faster-whisper", "openai"}
+KNOWN_ENGINES = {"mock", "sensevoice", "paraformer", "faster-whisper", "openai"}
+
+# Engines that can label speakers.
+DIARIZATION_ENGINES = {"paraformer"}
 
 
 def resolve_engine_name(engine: str, language: str = "auto") -> str:
@@ -43,6 +46,10 @@ def get_asr_engine(
         from moon_media_lab.asr.engines.sensevoice import SenseVoiceEngine
 
         return SenseVoiceEngine(model_dir=model_dir)
+    if resolved == "paraformer":
+        from moon_media_lab.asr.engines.paraformer import ParaformerEngine
+
+        return ParaformerEngine(model_dir=model_dir)
     if resolved == "faster-whisper":
         from moon_media_lab.asr.engines.faster_whisper import FasterWhisperEngine
 
