@@ -53,6 +53,11 @@ Phase 1 (Chinese ASR) is implemented and validated:
 - CLI exit codes and actionable error hints per `docs/cli-v1-spec.md`
 - long media: automatic chunking with checkpoints, progress/ETA, and
   `moon-media resume <job-dir>` to continue interrupted jobs
+- LLM post-processing via provider adapters (`claude-cli` today, `mock`
+  for tests): `moon-media process <job-dir> --mode knowledge --clean`
+  turns a finished transcript into knowledge notes and a cleaned
+  readable transcript; `postproc/provenance.json` records which
+  provider saw the data
 
 Quick start:
 

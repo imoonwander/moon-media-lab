@@ -50,21 +50,6 @@ def render_transcript_md(result) -> str:
     return "\n".join(lines).strip() + "\n"
 
 
-def render_knowledge_md(result) -> str:
-    full_text = "\n".join(segment.text for segment in result.segments)
-    words = full_text.split()
-    preview = " ".join(words[:80])
-    return (
-        "# Knowledge Notes\n\n"
-        "## Source Summary\n\n"
-        f"{preview or 'No transcript text available.'}\n\n"
-        "## Reusable Assets\n\n"
-        "- Topic map: pending LLM processor\n"
-        "- Knowledge cards: pending LLM processor\n"
-        "- Skill/SOP candidates: pending LLM processor\n"
-    )
-
-
 def _progress(message: str) -> None:
     print(message, file=sys.stderr, flush=True)
 
@@ -219,6 +204,7 @@ def _execute(
     *,
     chunk_sec: int,
     model_dir: str | None,
+    llm: str = "auto",
 ) -> Path:
     engine_source = request.media.source
     resolved_engine = request.engine
@@ -261,7 +247,12 @@ def _execute(
     write_json(job_dir / "transcript.raw.json", result.to_dict())
     (job_dir / "transcript.md").write_text(render_transcript_md(result), encoding="utf-8")
     if request.mode in {"knowledge", "skill", "english-study"}:
-        (job_dir / "knowledge.md").write_text(render_knowledge_md(result), encoding="utf-8")
+        # Transcript artifacts are already on disk: if the LLM step fails,
+        # `moon-media process <job-dir>` can redo it without re-transcribing.
+        from moon_media_lab.llm.registry import get_llm_provider
+        from moon_media_lab.postproc.runner import generate_mode_doc
+
+        generate_mode_doc(result, request.mode, get_llm_provider(llm), job_dir)
     append_log(
         job_dir,
         f"finished engine={result.meta.engine} model={result.meta.model} "
@@ -282,6 +273,7 @@ def run_transcription(
     job_base_dir: Path | None = None,
     model_dir: str | None = None,
     chunk_sec: int = DEFAULT_CHUNK_SEC,
+    llm: str = "auto",
 ) -> Path:
     resolved_engine = resolve_engine_name(engine_name, language)
     request = TranscribeRequest(
@@ -294,10 +286,12 @@ def run_transcription(
     job_dir = new_job_dir("transcribe", base_dir=job_base_dir)
     append_log(job_dir, f"created job for {source} engine={resolved_engine}")
     write_json(job_dir / "input.json", asdict(request))
-    return _execute(request, job_dir, chunk_sec=chunk_sec, model_dir=model_dir)
+    return _execute(request, job_dir, chunk_sec=chunk_sec, model_dir=model_dir, llm=llm)
 
 
-def resume_transcription(job_dir: Path, *, model_dir: str | None = None) -> Path:
+def resume_transcription(
+    job_dir: Path, *, model_dir: str | None = None, llm: str = "auto"
+) -> Path:
     """Continue an interrupted job from its per-chunk checkpoints."""
     input_json = job_dir / "input.json"
     if not input_json.exists():
@@ -322,4 +316,4 @@ def resume_transcription(job_dir: Path, *, model_dir: str | None = None) -> Path
     if manifest_path.exists():
         chunk_sec = json.loads(manifest_path.read_text(encoding="utf-8"))["chunk_sec"]
     append_log(job_dir, "resuming job")
-    return _execute(request, job_dir, chunk_sec=chunk_sec, model_dir=model_dir)
+    return _execute(request, job_dir, chunk_sec=chunk_sec, model_dir=model_dir, llm=llm)

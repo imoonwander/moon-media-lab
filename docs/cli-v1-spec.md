@@ -61,6 +61,34 @@ moon-media tts <text-or-file> \
   --output output/demo.mp3
 ```
 
+### resume
+
+```bash
+moon-media resume jobs/transcribe-20260703-221149
+```
+
+Continues an interrupted transcribe job from its per-chunk checkpoints.
+
+### process
+
+```bash
+moon-media process jobs/transcribe-20260703-221149 \
+  --mode knowledge \
+  --clean \
+  --llm claude-cli
+```
+
+Runs LLM post-processing on a finished transcribe job:
+
+```text
+--mode knowledge|english-study|skill        generate the mode document
+--clean                                     produce transcript.clean.md (batched, checkpointed)
+--llm auto|claude-cli|codex-cli|gemini-cli|mock   LLM provider adapter
+```
+
+`postproc/provenance.json` records which provider saw the data and
+whether it left the machine.
+
 ### models
 
 Future command:
@@ -109,6 +137,7 @@ Recommended:
 4 media probe/extract failure
 5 model download/load failure
 6 transcription failure
+7 post-processing failure
 ```
 
 ## Output

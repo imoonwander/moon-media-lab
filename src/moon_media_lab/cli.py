@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from moon_media_lab import __version__
-from moon_media_lab.errors import MoonMediaError
+from moon_media_lab.errors import InvalidArguments, MoonMediaError
 from moon_media_lab.paths import get_paths
 from moon_media_lab.pipelines.transcribe import (
     DEFAULT_CHUNK_SEC,
@@ -68,14 +68,36 @@ def command_transcribe(args: argparse.Namespace) -> int:
         job_base_dir=Path(args.job_dir) if args.job_dir else None,
         model_dir=args.model_dir,
         chunk_sec=args.chunk_sec,
+        llm=args.llm,
     )
     print(job_dir)
     return 0
 
 
 def command_resume(args: argparse.Namespace) -> int:
-    job_dir = resume_transcription(Path(args.job_dir), model_dir=args.model_dir)
+    job_dir = resume_transcription(Path(args.job_dir), model_dir=args.model_dir, llm=args.llm)
     print(job_dir)
+    return 0
+
+
+def command_process(args: argparse.Namespace) -> int:
+    from moon_media_lab.llm.registry import get_llm_provider
+    from moon_media_lab.postproc.runner import clean_transcript, generate_mode_doc, load_result
+
+    job_dir = Path(args.job_dir)
+    result = load_result(job_dir)
+    provider = get_llm_provider(args.llm)
+    outputs = []
+    if args.clean:
+        outputs.append(clean_transcript(result, provider, job_dir))
+    if args.mode:
+        outputs.append(generate_mode_doc(result, args.mode, provider, job_dir))
+    if not outputs:
+        raise InvalidArguments(
+            "Nothing to do.", hint="Pass --mode knowledge|english-study|skill and/or --clean."
+        )
+    for output in outputs:
+        print(output)
     return 0
 
 
@@ -121,12 +143,29 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_CHUNK_SEC,
         help="Chunk length in seconds for long media (default: %(default)s)",
     )
+    transcribe.add_argument("--llm", default="auto", help="LLM provider for post-processing")
     transcribe.set_defaults(func=command_transcribe)
 
     resume = subparsers.add_parser("resume", help="Continue an interrupted transcribe job")
     resume.add_argument("job_dir", help="Path to the jobs/transcribe-... folder")
     resume.add_argument("--model-dir", help="Override the engine model path")
+    resume.add_argument("--llm", default="auto", help="LLM provider for post-processing")
     resume.set_defaults(func=command_resume)
+
+    process = subparsers.add_parser(
+        "process", help="Run LLM post-processing on a finished transcribe job"
+    )
+    process.add_argument("job_dir", help="Path to the jobs/transcribe-... folder")
+    process.add_argument(
+        "--mode",
+        choices=["knowledge", "english-study", "skill"],
+        help="Generate this document from the transcript",
+    )
+    process.add_argument(
+        "--clean", action="store_true", help="Produce transcript.clean.md (batched cleanup)"
+    )
+    process.add_argument("--llm", default="auto", help="LLM provider (claude-cli|mock)")
+    process.set_defaults(func=command_process)
 
     tts = subparsers.add_parser("tts", help="Create speech from text using a TTS engine")
     tts.add_argument("text", help="Text or local text file path")

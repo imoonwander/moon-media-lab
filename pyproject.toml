@@ -1,6 +1,6 @@
 [project]
 name = "moon-media-lab"
-version = "0.0.3"
+version = "0.0.4"
 description = "Local-first media to transcript, knowledge, and voice lab."
 requires-python = ">=3.9"
 dependencies = []

@@ -77,15 +77,27 @@ Deliverables:
 
 ## Phase 4: Post-processing
 
+Status: core done (2026-07-03). LLM providers are adapters
+(`claude-cli` shells out to the local Claude Code CLI with retry;
+`mock` for tests; select via `--llm` or `MOON_MEDIA_LAB_LLM_PROVIDER`).
+`moon-media process <job-dir>` post-processes finished jobs without
+re-transcribing: `--mode knowledge|english-study|skill` generates the
+mode document in one call; `--clean` produces `transcript.clean.md`
+in checkpointed batches. `postproc/provenance.json` records which
+provider saw the data and whether it left the machine.
+
 Deliverables:
 
-- transcript cleanup
-- summary
-- knowledge cards
-- English study materials
-- Skill/SOP draft output
+- transcript cleanup (done, batched + checkpointed)
+- summary (done, part of knowledge.md)
+- knowledge cards (done, part of knowledge.md)
+- English study materials (done, english-study.md)
+- Skill/SOP draft output (done, skill-draft.md)
 
-LLM providers should be adapters too.
+Remaining:
+
+- API-based providers (anthropic/openai SDK) as alternative adapters
+- diff-aware re-processing when a transcript is re-run
 
 ## Phase 5: TTS
 

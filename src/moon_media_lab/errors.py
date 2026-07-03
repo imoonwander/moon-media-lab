@@ -29,3 +29,7 @@ class ModelDownloadFailed(MoonMediaError):
 
 class TranscriptionFailed(MoonMediaError):
     exit_code = 6
+
+
+class PostProcessFailed(MoonMediaError):
+    exit_code = 7
