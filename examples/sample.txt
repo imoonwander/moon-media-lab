@@ -1,0 +1,3 @@
+Moon Media Lab is a local-first media workflow.
+It should turn audio and video into transcripts, knowledge cards, English study notes, and reusable skills.
+This sample file is used by the mock ASR engine.

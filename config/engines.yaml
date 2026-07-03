@@ -1,0 +1,22 @@
+# Engine routing plan. The first implementation uses mock engines only.
+asr:
+  default: mock
+  routes:
+    zh: sensevoice
+    en: faster-whisper
+    mixed: faster-whisper
+    auto: mock
+
+tts:
+  default: mock
+  routes:
+    zh: edge-tts
+    en: edge-tts
+    auto: mock
+
+paths:
+  models: ./models
+  cache: ./cache
+  jobs: ./jobs
+  downloads: ./downloads
+  output: ./output

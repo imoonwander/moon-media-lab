@@ -1,0 +1,18 @@
+[project]
+name = "moon-media-lab"
+version = "0.0.1"
+description = "Local-first media to transcript, knowledge, and voice lab."
+requires-python = ">=3.9"
+dependencies = []
+
+[project.optional-dependencies]
+asr-sensevoice = ["funasr", "modelscope", "torch", "torchaudio", "soundfile"]
+asr-whisper = ["faster-whisper"]
+tts-edge = ["edge-tts"]
+dev = ["pytest", "ruff"]
+
+[project.scripts]
+moon-media = "moon_media_lab.cli:main"
+
+[tool.ruff]
+line-length = 100
