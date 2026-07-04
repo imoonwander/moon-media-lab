@@ -46,9 +46,8 @@
   button.regen { background: var(--panel2); color: var(--ok); font-weight: 400; }
   button:disabled { opacity: .45; cursor: default; }
   .check { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 13px; }
-  .task, .job { padding: 10px 12px; border: 1px solid var(--border);
-    border-radius: 8px; margin-bottom: 8px; background: var(--panel2); }
-  .job { cursor: pointer; }
+  .job { padding: 10px 12px; border: 1px solid var(--border);
+    border-radius: 8px; margin-bottom: 8px; background: var(--panel2); cursor: pointer; }
   .job:hover, .job.active { border-color: var(--accent); }
   .title { font-size: 13px; overflow: hidden; text-overflow: ellipsis;
     white-space: nowrap; }
@@ -58,7 +57,7 @@
     background: var(--border); color: var(--muted); white-space: nowrap; }
   .chip.s-done, .chip.s-finished { background: #1d2b1f; color: var(--ok); }
   .chip.s-failed, .chip.s-postprocess_failed { background: #33202a; color: var(--err); }
-  .chip.s-cancelled { background: var(--border); color: var(--muted); }
+  .chip.s-cancelled, .chip.s-stalled { background: var(--border); color: var(--muted); }
   .chip.s-running, .chip.s-transcribing, .chip.s-downloading, .chip.s-extracting,
   .chip.s-postprocessing, .chip.s-preparing, .chip.s-queued {
     background: #2a2618; color: var(--warn); }
@@ -129,11 +128,7 @@
       <div style="margin-top:14px"><button id="submit">开始转写</button></div>
     </div>
     <div class="panel">
-      <h2>执行队列</h2>
-      <div id="tasks"><div class="empty">空闲</div></div>
-    </div>
-    <div class="panel">
-      <h2>历史任务</h2>
+      <h2>任务</h2>
       <div id="jobs"><div class="empty">暂无</div></div>
     </div>
   </div>
@@ -150,9 +145,13 @@ const STATUS_ZH = {
   cancelled: "已取消", preparing: "准备中", downloading: "下载中",
   extracting: "提取音频", transcribing: "转写中", postprocessing: "后处理中",
   postprocess_failed: "后处理失败", done: "完成", unknown: "—",
+  stalled: "已中断（可续跑）",
 };
 const zh = (s) => STATUS_ZH[s] || s;
+const ACTIVE_STATES = ["queued", "preparing", "downloading", "extracting",
+  "transcribing", "postprocessing"];
 let currentJob = null, segmentsFor = null, follow = true;
+let taskByJob = {};
 
 function toast(msg) {
   const el = $("#toast");
@@ -165,6 +164,15 @@ function fmtTs(sec) {
     .padStart(2, "0")).join(":");
 }
 
+// A job is "live" when a queued/running task is bound to it.
+function liveTask(jobId) { return taskByJob[jobId]; }
+
+function effectiveStatus(job) {
+  const live = liveTask(job.id);
+  if (ACTIVE_STATES.includes(job.status) && !live) return "stalled";
+  return job.status;
+}
+
 async function refresh() {
   try {
     const [status, jobsRes] = await Promise.all([
@@ -172,12 +180,14 @@ async function refresh() {
       fetch("/api/jobs").then(r => r.json()),
     ]);
     $("#version").textContent = "v" + status.version;
-    renderTasks(status.tasks);
-    const anyActive = status.tasks.some(t => ["queued", "running"].includes(t.status));
-    renderJobs(jobsRes.jobs, anyActive);
+    taskByJob = {};
+    for (const t of status.tasks) {
+      if (t.job_id && ["queued", "running"].includes(t.status)) taskByJob[t.job_id] = t;
+    }
     const running = status.tasks.find(t => t.status === "running");
     $("#running-banner").innerHTML = running
       ? `<span class="spinner"></span> ${running.kind}：${running.label}` : "";
+    renderJobs(jobsRes.jobs);
     if (currentJob) {
       const job = jobsRes.jobs.find(j => j.id === currentJob);
       if (job) updateDetailHeader(job);
@@ -185,42 +195,7 @@ async function refresh() {
   } catch (e) { /* server restarting */ }
 }
 
-function renderTasks(tasks) {
-  const box = $("#tasks");
-  const active = tasks.filter(t => ["queued", "running"].includes(t.status));
-  const recent = tasks.filter(t => !["queued", "running"].includes(t.status)).slice(0, 5);
-  if (!active.length && !recent.length) {
-    box.innerHTML = '<div class="empty">空闲</div>'; return;
-  }
-  box.innerHTML = "";
-  for (const t of [...active, ...recent]) {
-    const div = document.createElement("div");
-    div.className = "task";
-    const cancellable = ["queued", "running"].includes(t.status);
-    div.innerHTML = `
-      <div style="display:flex;align-items:center;gap:8px">
-        <span class="chip s-${t.status}">${zh(t.status)}</span>
-        <span class="title" style="flex:1">${t.kind} · ${t.label}</span>
-        ${cancellable ? `<button class="danger" data-cancel="${t.id}">取消</button>` : ""}
-      </div>
-      ${t.started_at ? `<div class="muted" style="font-size:11px;margin-top:2px">开始于 ${t.started_at}</div>` : ""}
-      ${t.error ? `<div class="err-text">${t.error}</div>` : ""}`;
-    box.appendChild(div);
-  }
-  box.querySelectorAll("[data-cancel]").forEach(btn => btn.onclick = async (e) => {
-    e.stopPropagation();
-    const res = await fetch(`/api/queue/${btn.dataset.cancel}/cancel`, {method: "POST"})
-      .then(r => r.json());
-    toast(res.cancelled
-      ? (res.was === "running" ? "已终止（进度已存档，可续跑）" : "已从队列移除")
-      : "无法取消：" + res.reason);
-  });
-}
-
-const ACTIVE_STATES = ["preparing", "downloading", "extracting", "transcribing",
-  "postprocessing"];
-
-function renderJobs(jobs, anyActive) {
+function renderJobs(jobs) {
   const box = $("#jobs");
   if (!jobs.length) { box.innerHTML = '<div class="empty">暂无</div>'; return; }
   box.innerHTML = "";
@@ -230,33 +205,42 @@ function renderJobs(jobs, anyActive) {
     const src = (job.state.source || (job.input && job.input.media.source) || job.id)
       .split("/").pop();
     const st = job.state;
-    // A job stuck in an active state with nothing running was interrupted.
-    const stalled = ACTIVE_STATES.includes(job.status) && !anyActive;
-    const statusLabel = stalled ? "已中断（可续跑）" : zh(job.status);
-    const statusClass = stalled ? "s-cancelled" : `s-${job.status}`;
+    const eff = effectiveStatus(job);
+    const live = liveTask(job.id);
     let progress = "";
-    if (st.chunks_total && job.status === "transcribing" && !stalled) {
+    if (st.chunks_total && eff === "transcribing") {
       progress = `${st.chunks_done || 0}/${st.chunks_total} 块` +
         (st.eta_sec ? ` · 剩余约 ${fmtTs(st.eta_sec)}` : "");
     }
     div.innerHTML = `
-      <div class="title">${src}</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="title" style="flex:1">${src}</div>
+        ${live ? `<button class="danger" data-cancel="${job.id}">取消</button>` : ""}
+      </div>
       <div class="meta">
-        <span class="chip ${statusClass}">${statusLabel}</span>
+        <span class="chip s-${eff}">${zh(eff)}</span>
         <span class="muted" style="font-size:11px">${job.id.replace("transcribe-", "")}</span>
         ${progress ? `<span class="muted" style="font-size:11px">${progress}</span>` : ""}
       </div>
-      ${st.percent != null && job.status !== "done"
+      ${st.percent != null && !["done", "cancelled", "stalled"].includes(eff)
         ? `<div class="bar"><div style="width:${st.percent}%"></div></div>` : ""}
-      ${st.error ? `<div class="err-text">${st.error.slice(0, 160)}</div>` : ""}`;
+      ${st.error ? `<div class="err-text">${String(st.error).slice(0, 160)}</div>` : ""}`;
     div.onclick = () => openJob(job.id);
     box.appendChild(div);
   }
+  box.querySelectorAll("[data-cancel]").forEach(btn => btn.onclick = async (e) => {
+    e.stopPropagation();
+    if (!window.confirm("取消这个任务？已完成的部分会保留，之后可续跑。")) return;
+    const res = await fetch(`/api/jobs/${btn.dataset.cancel}/cancel`, {method: "POST"})
+      .then(r => r.json());
+    toast(res.cancelled ? "已取消（进度已保留）" : "无法取消：" + res.reason);
+  });
 }
 
 function updateDetailHeader(job) {
   const h = $("#detail-status");
-  if (h) h.innerHTML = `<span class="chip s-${job.status}">${zh(job.status)}</span>`;
+  const eff = effectiveStatus(job);
+  if (h) h.innerHTML = `<span class="chip s-${eff}">${zh(eff)}</span>`;
   if (job.status === "done" && segmentsFor !== job.id) loadDetail(job.id);
 }
 
@@ -269,7 +253,8 @@ async function loadDetail(id) {
   const detail = $("#detail");
   const job = await fetch(`/api/jobs/${id}`).then(r => r.json());
   const has = (name) => job.artifacts.includes(name);
-  const busy = !["done", "failed", "postprocess_failed", "unknown"].includes(job.status);
+  const eff = effectiveStatus(job);
+  const busy = ACTIVE_STATES.includes(eff);
 
   const procBtn = (label, exists, payload) => {
     const cls = exists ? "regen" : "secondary";
@@ -279,13 +264,13 @@ async function loadDetail(id) {
       data-proc='${JSON.stringify(payload)}' data-confirm="${confirmMsg || ""}">${text}</button>`;
   };
 
-  let html = `<h2>${job.id} <span id="detail-status"><span class="chip s-${job.status}">${zh(job.status)}</span></span></h2>`;
+  let html = `<h2>${job.id} <span id="detail-status"><span class="chip s-${eff}">${zh(eff)}</span></span></h2>`;
   html += `<div class="actions">
     ${procBtn("知识笔记", has("knowledge.md"), {mode: "knowledge"})}
     ${procBtn("清理全文", has("transcript.clean.md"), {clean: true, force: has("transcript.clean.md")})}
     ${procBtn("说话人命名", false, {name_speakers: true})}
-    ${job.status === "failed" || has("transcript.partial.md") ||
-      (ACTIVE_STATES.includes(job.status) && !has("transcript.raw.json"))
+    ${busy && liveTask(id) ? `<button class="danger" id="cancel-btn">取消当前执行</button>` : ""}
+    ${["failed", "stalled", "cancelled"].includes(eff) && !has("transcript.raw.json")
       ? `<button class="secondary" id="resume-btn">续跑</button>` : ""}
   </div>`;
   html += `<div class="artifacts">` + job.artifacts
@@ -313,8 +298,10 @@ async function loadDetail(id) {
     const partial = await fetch(`/api/jobs/${id}/file/transcript.partial.md`).then(r => r.text());
     html += `<div class="muted" style="margin-top:10px">转写进行中，以下为已完成部分：</div>
       <pre style="white-space:pre-wrap;font:inherit">${partial.slice(0, 20000)}</pre>`;
+  } else if (busy) {
+    html += `<div class="empty">任务执行中（${zh(eff)}），完成后此处显示分段文本</div>`;
   } else {
-    html += `<div class="empty">转写完成后此处显示分段文本</div>`;
+    html += `<div class="empty">尚无转写结果</div>`;
   }
   detail.innerHTML = html;
   segmentsFor = id;
@@ -333,6 +320,13 @@ function bindDetail(id) {
     });
     toast(res.ok ? "已加入执行队列" : "提交失败：" + (await res.text()).slice(0, 120));
   });
+  const cancelBtn = $("#cancel-btn");
+  if (cancelBtn) cancelBtn.onclick = async () => {
+    if (!window.confirm("取消这个任务？已完成的部分会保留，之后可续跑。")) return;
+    const res = await fetch(`/api/jobs/${id}/cancel`, {method: "POST"}).then(r => r.json());
+    toast(res.cancelled ? "已取消（进度已保留）" : "无法取消：" + res.reason);
+    loadDetail(id);
+  };
   const resumeBtn = $("#resume-btn");
   if (resumeBtn) resumeBtn.onclick = async () => {
     const res = await fetch(`/api/jobs/${id}/resume`, {method: "POST"});
@@ -381,7 +375,7 @@ $("#submit").onclick = async () => {
         diarization: $("#diarization").checked,
       }),
     });
-    if (res.ok) { toast("已加入执行队列"); $("#source").value = ""; fileInput.value = ""; }
+    if (res.ok) { toast("已提交，任务卡片见左侧列表"); $("#source").value = ""; fileInput.value = ""; }
     else toast("提交失败：" + (await res.text()).slice(0, 120));
   } finally { $("#submit").disabled = false; }
 };

@@ -97,21 +97,29 @@ def command_process(args: argparse.Namespace) -> int:
         name_speakers,
     )
 
+    from moon_media_lab.jobs import update_state
+
     job_dir = Path(args.job_dir)
     result = load_result(job_dir)
     provider = get_llm_provider(args.llm)
-    outputs = []
-    if args.name_speakers:
-        outputs.append(name_speakers(result, provider, job_dir))
-    if args.clean:
-        outputs.append(clean_transcript(result, provider, job_dir))
-    if args.mode:
-        outputs.append(generate_mode_doc(result, args.mode, provider, job_dir))
-    if not outputs:
+    if not (args.name_speakers or args.clean or args.mode):
         raise InvalidArguments(
             "Nothing to do.",
             hint="Pass --mode knowledge|english-study|skill, --clean, and/or --name-speakers.",
         )
+    update_state(job_dir, "postprocessing")
+    outputs = []
+    try:
+        if args.name_speakers:
+            outputs.append(name_speakers(result, provider, job_dir))
+        if args.clean:
+            outputs.append(clean_transcript(result, provider, job_dir))
+        if args.mode:
+            outputs.append(generate_mode_doc(result, args.mode, provider, job_dir))
+    except Exception as exc:
+        update_state(job_dir, "postprocess_failed", error=str(exc))
+        raise
+    update_state(job_dir, "done")
     for output in outputs:
         print(output)
     return 0

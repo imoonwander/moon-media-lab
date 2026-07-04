@@ -9,7 +9,9 @@ import time
 import uuid
 from pathlib import Path
 
-from moon_media_lab.jobs import read_state
+import os
+
+from moon_media_lab.jobs import read_state, update_state
 from moon_media_lab.paths import get_paths
 
 # One worker: ASR is CPU/memory bound, serial execution keeps the machine
@@ -70,6 +72,7 @@ def _worker() -> None:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                env=task.get("env"),
             )
             with _tasks_lock:
                 task["process"] = process
@@ -92,7 +95,13 @@ def _worker() -> None:
             _task_queue.task_done()
 
 
-def _submit(kind: str, label: str, argv: list[str], job_id: str | None = None) -> dict:
+def _submit(
+    kind: str,
+    label: str,
+    argv: list[str],
+    job_id: str | None = None,
+    env: dict | None = None,
+) -> dict:
     task = {
         "id": uuid.uuid4().hex[:8],
         "kind": kind,
@@ -101,6 +110,7 @@ def _submit(kind: str, label: str, argv: list[str], job_id: str | None = None) -
         "submitted_at": time.strftime("%H:%M:%S"),
         "argv": argv,
         "job_id": job_id,
+        "env": env,
     }
     with _tasks_lock:
         _tasks[task["id"]] = task
@@ -218,6 +228,21 @@ def create_app():
         source = (payload.get("source") or "").strip()
         if not source:
             raise HTTPException(422, "source is required")
+        # Pre-create the job dir so the queued task is a visible job card
+        # from the moment of submission.
+        job_dir = paths.jobs / time.strftime("transcribe-%Y%m%d-%H%M%S")
+        suffix = 1
+        while job_dir.exists():
+            suffix += 1
+            job_dir = paths.jobs / f"{job_dir.name.rsplit('-', 1)[0]}-{suffix}"
+        job_dir.mkdir(parents=True)
+        update_state(
+            job_dir,
+            "queued",
+            source=source,
+            language=payload.get("language", "auto"),
+            mode=payload.get("mode", "transcript"),
+        )
         argv = _cli(
             "transcribe",
             source,
@@ -230,7 +255,10 @@ def create_app():
         )
         if payload.get("diarization"):
             argv.append("--diarization")
-        return _submit("转写", source.split("/")[-1][:60], argv)
+        env = {**os.environ, "MOON_MEDIA_LAB_JOB_DIR_OVERRIDE": str(job_dir)}
+        return _submit(
+            "转写", source.split("/")[-1][:60], argv, job_id=job_dir.name, env=env
+        )
 
     @app.post("/api/jobs/{job_id}/process")
     async def postprocess_job(job_id: str, payload: dict):
@@ -263,22 +291,39 @@ def create_app():
         job_dir = _safe_job_dir(job_id)
         return _submit("续跑", job_id[-6:], _cli("resume", str(job_dir)), job_id=job_id)
 
-    @app.post("/api/queue/{task_id}/cancel")
-    async def cancel_task(task_id: str):
+    @app.post("/api/jobs/{job_id}/cancel")
+    async def cancel_job(job_id: str):
+        job_dir = _safe_job_dir(job_id)
         with _tasks_lock:
-            task = _tasks.get(task_id)
-            if task is None:
-                raise HTTPException(404, "task not found")
-            if task["status"] == "queued":
-                task["status"] = "cancelled"
-                return {"cancelled": True, "was": "queued"}
-            if task["status"] == "running":
+            task = next(
+                (
+                    t
+                    for t in _tasks.values()
+                    if t.get("job_id") == job_id and t["status"] in {"queued", "running"}
+                ),
+                None,
+            )
+            if task is not None:
+                was = task["status"]
                 task["status"] = "cancelled"
                 process = task.get("process")
-                if process and process.poll() is None:
+                if was == "running" and process and process.poll() is None:
                     process.terminate()
-                return {"cancelled": True, "was": "running"}
-        return {"cancelled": False, "reason": f"task already {task['status']}"}
+                update_state(job_dir, "cancelled")
+                return {"cancelled": True, "was": was}
+        # No live task: clear a stale active state left by an interrupted run.
+        state = read_state(job_dir)
+        if state.get("status") in {
+            "queued",
+            "preparing",
+            "downloading",
+            "extracting",
+            "transcribing",
+            "postprocessing",
+        }:
+            update_state(job_dir, "cancelled")
+            return {"cancelled": True, "was": "stale"}
+        return {"cancelled": False, "reason": f"job is {state.get('status')}"}
 
     return app
 

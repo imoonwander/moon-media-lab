@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 
@@ -8,6 +9,13 @@ from moon_media_lab.paths import get_paths
 
 
 def new_job_dir(prefix: str = "job", base_dir: Path | None = None) -> Path:
+    # The web server pre-creates the job dir (so a queued task is visible
+    # as a job immediately) and points the subprocess at it via env.
+    override = os.environ.get("MOON_MEDIA_LAB_JOB_DIR_OVERRIDE")
+    if override:
+        job_dir = Path(override)
+        job_dir.mkdir(parents=True, exist_ok=True)
+        return job_dir
     paths = get_paths()
     paths.ensure()
     jobs_root = base_dir if base_dir is not None else paths.jobs
