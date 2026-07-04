@@ -55,6 +55,20 @@ def _js_runtime_args() -> list[str]:
     return []
 
 
+def _ua_args(url: str) -> list[str]:
+    ua = os.environ.get("MOON_MEDIA_LAB_HTTP_UA")
+    if ua:
+        return ["--user-agent", ua]
+    # Bilibili's WAF intermittently 412s Chrome-family UAs; Safari passes.
+    if "bilibili.com" in url:
+        return [
+            "--user-agent",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 "
+            "(KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+        ]
+    return []
+
+
 def _download_via_binary(binary: str, url: str, downloads_dir: Path) -> Path:
     argv = [
         binary,
@@ -70,6 +84,7 @@ def _download_via_binary(binary: str, url: str, downloads_dir: Path) -> Path:
         "--no-warnings",
         *_cookie_args(),
         *_js_runtime_args(),
+        *_ua_args(url),
         url,
     ]
     completed = subprocess.run(argv, capture_output=True, text=True)

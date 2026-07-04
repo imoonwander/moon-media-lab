@@ -145,6 +145,19 @@ def command_models(args: argparse.Namespace) -> int:
     raise InvalidArguments("Unknown models subcommand")
 
 
+def command_serve(args: argparse.Namespace) -> int:
+    if importlib.util.find_spec("fastapi") is None or importlib.util.find_spec("uvicorn") is None:
+        raise MoonMediaError(
+            "web dependencies are not installed.",
+            hint="Install them: pip install 'moon-media-lab[web]'",
+        )
+    from moon_media_lab.web.server import serve
+
+    print(f"Moon Media Lab web UI: http://{args.host}:{args.port}")
+    serve(host=args.host, port=args.port)
+    return 0
+
+
 def command_tts(args: argparse.Namespace) -> int:
     paths = get_paths()
     paths.ensure()
@@ -222,6 +235,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     process.add_argument("--llm", default="auto", help="LLM provider (claude-cli|mock)")
     process.set_defaults(func=command_process)
+
+    serve_cmd = subparsers.add_parser("serve", help="Start the local web UI")
+    serve_cmd.add_argument("--host", default="127.0.0.1")
+    serve_cmd.add_argument("--port", type=int, default=8765)
+    serve_cmd.set_defaults(func=command_serve)
 
     models = subparsers.add_parser("models", help="Manage local ASR models")
     models_sub = models.add_subparsers(dest="models_command", required=True)

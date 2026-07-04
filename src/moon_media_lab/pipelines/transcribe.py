@@ -9,7 +9,7 @@ from pathlib import Path
 from moon_media_lab.asr.base import ASREngine
 from moon_media_lab.asr.registry import DIARIZATION_ENGINES, get_asr_engine, resolve_engine_name
 from moon_media_lab.errors import InvalidArguments, TranscriptionFailed
-from moon_media_lab.jobs import append_log, new_job_dir, write_json
+from moon_media_lab.jobs import append_log, new_job_dir, update_state, write_json
 from moon_media_lab.media.downloader import download_media, is_url
 from moon_media_lab.media.resolver import AudioChunk, resolve_media, split_audio
 from moon_media_lab.paths import get_paths
@@ -173,6 +173,14 @@ def _run_chunked(
         fresh_runtimes.append(result.meta.runtime_sec or 0.0)
         remaining = total - len(results)
         eta = (sum(fresh_runtimes) / len(fresh_runtimes)) * remaining if fresh_runtimes else 0.0
+        update_state(
+            job_dir,
+            "transcribing",
+            chunks_done=len(results),
+            chunks_total=total,
+            percent=round(len(results) / total * 100),
+            eta_sec=round(eta),
+        )
         _progress(
             f"[chunk {chunk.index + 1}/{total}] {window} done in {result.meta.runtime_sec}s, "
             f"elapsed {format_ts(time.perf_counter() - run_started)}, eta {format_ts(eta)}"
@@ -225,10 +233,12 @@ def _execute(
         else:
             local_source = Path(request.media.source)
             if request.media.kind == "url":
+                update_state(job_dir, "downloading")
                 _progress(f"downloading {request.media.source} ...")
                 local_source = download_media(request.media.source, get_paths().downloads)
                 append_log(job_dir, f"downloaded to {local_source}")
                 _progress(f"downloaded: {local_source.name}")
+            update_state(job_dir, "extracting")
             media = resolve_media(local_source, job_dir)
             engine_source = media.audio_path
             duration_sec = media.duration_sec
@@ -252,8 +262,10 @@ def _execute(
         chunks = _load_or_create_chunks(job_dir, engine_source, chunk_sec)
         append_log(job_dir, f"chunked run: {len(chunks)} chunks of {chunk_sec}s")
         _progress(f"long media ({format_ts(duration_sec)}): {len(chunks)} chunks of {chunk_sec}s")
+        update_state(job_dir, "transcribing", chunks_total=len(chunks), duration_sec=duration_sec)
         result = _run_chunked(engine, request, job_dir, chunks)
     else:
+        update_state(job_dir, "transcribing", duration_sec=duration_sec)
         result = engine.transcribe(_chunk_request(engine_source, request))
 
     write_json(job_dir / "transcript.raw.json", result.to_dict())
@@ -269,7 +281,16 @@ def _execute(
         from moon_media_lab.llm.registry import get_llm_provider
         from moon_media_lab.postproc.runner import generate_mode_doc
 
+        update_state(job_dir, "postprocessing")
         generate_mode_doc(result, request.mode, get_llm_provider(llm), job_dir)
+    update_state(
+        job_dir,
+        "done",
+        percent=100,
+        engine=result.meta.engine,
+        duration_sec=result.meta.duration_sec,
+        runtime_sec=result.meta.runtime_sec,
+    )
     append_log(
         job_dir,
         f"finished engine={result.meta.engine} model={result.meta.model} "
@@ -315,7 +336,14 @@ def run_transcription(
     job_dir = new_job_dir("transcribe", base_dir=job_base_dir)
     append_log(job_dir, f"created job for {source} engine={resolved_engine}")
     write_json(job_dir / "input.json", asdict(request))
-    return _execute(request, job_dir, chunk_sec=chunk_sec, model_dir=model_dir, llm=llm)
+    update_state(
+        job_dir, "preparing", source=source, language=language, engine=resolved_engine, mode=mode
+    )
+    try:
+        return _execute(request, job_dir, chunk_sec=chunk_sec, model_dir=model_dir, llm=llm)
+    except Exception as exc:
+        update_state(job_dir, "failed", error=str(exc))
+        raise
 
 
 def resume_transcription(
@@ -345,4 +373,9 @@ def resume_transcription(
     if manifest_path.exists():
         chunk_sec = json.loads(manifest_path.read_text(encoding="utf-8"))["chunk_sec"]
     append_log(job_dir, "resuming job")
-    return _execute(request, job_dir, chunk_sec=chunk_sec, model_dir=model_dir, llm=llm)
+    update_state(job_dir, "preparing", resumed=True)
+    try:
+        return _execute(request, job_dir, chunk_sec=chunk_sec, model_dir=model_dir, llm=llm)
+    except Exception as exc:
+        update_state(job_dir, "failed", error=str(exc))
+        raise

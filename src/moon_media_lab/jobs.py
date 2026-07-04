@@ -28,3 +28,32 @@ def write_json(path: Path, data: object) -> None:
 def append_log(job_dir: Path, message: str) -> None:
     with (job_dir / "run.log").open("a", encoding="utf-8") as handle:
         handle.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S%z')} {message}\n")
+
+
+def update_state(job_dir: Path, status: str, **fields) -> None:
+    """Merge status/fields into state.json — the machine-readable job status
+    any frontend (CLI, web, GUI) can poll. Job folders stay the API."""
+    state_path = job_dir / "state.json"
+    state = {}
+    if state_path.exists():
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            state = {}
+    state.update(fields)
+    state["status"] = status
+    state["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    write_json(state_path, state)
+
+
+def read_state(job_dir: Path) -> dict:
+    state_path = job_dir / "state.json"
+    if not state_path.exists():
+        # Jobs created before state.json existed: infer from artifacts.
+        if (job_dir / "transcript.raw.json").exists():
+            return {"status": "done"}
+        return {"status": "unknown"}
+    try:
+        return json.loads(state_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {"status": "unknown"}

@@ -1,6 +1,6 @@
 [project]
 name = "moon-media-lab"
-version = "0.1.0"
+version = "0.2.0"
 description = "Local-first media lab: audio/video/online media to transcripts, subtitles, knowledge notes, and voice."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -21,10 +21,14 @@ asr-sensevoice = ["funasr", "modelscope", "torch", "torchaudio", "soundfile"]
 asr-whisper = ["faster-whisper"]
 url = ["yt-dlp"]
 tts-edge = ["edge-tts"]
-dev = ["pytest", "ruff"]
+web = ["fastapi", "uvicorn", "python-multipart"]
+dev = ["pytest", "ruff", "httpx"]
 
 [project.scripts]
 moon-media = "moon_media_lab.cli:main"
+
+[tool.setuptools.package-data]
+"moon_media_lab.web" = ["static/*.html"]
 
 [tool.ruff]
 line-length = 100

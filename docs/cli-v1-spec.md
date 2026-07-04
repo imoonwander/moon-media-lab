@@ -92,6 +92,18 @@ Runs LLM post-processing on a finished transcribe job:
 `postproc/provenance.json` records which provider saw the data and
 whether it left the machine.
 
+### serve
+
+```bash
+moon-media serve [--host 127.0.0.1] [--port 8765]
+```
+
+Local web UI: submit files/URLs, watch queue and per-chunk progress,
+read speaker-labeled segments with click-to-seek audio playback, and
+trigger post-processing. Requires the `web` extra. Every job writes a
+`state.json` (status/percent/eta) that any frontend can poll — the job
+folder remains the API.
+
 ### models
 
 ```bash

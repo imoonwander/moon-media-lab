@@ -44,6 +44,10 @@ is opt-in and goes through whichever CLI you already use (`claude`,
 - **TTS** — `moon-media tts` via Edge neural voices
 - **Self-contained models** — `models list|download|prune`, resumable
   downloads, `--mirror` for hf-mirror.com; nothing writes to `~/.cache`
+- **Web UI** — `moon-media serve` starts a local web app (submit
+  files/URLs, live progress, click-a-timestamp audio playback,
+  one-click post-processing); every job also writes a machine-readable
+  `state.json`, so the job folder stays the API
 
 ## Install
 
@@ -76,6 +80,10 @@ MOON_MEDIA_LAB_COOKIES_BROWSER=chrome \
 
 # post-process a finished job with the LLM CLI you already have
 .venv/bin/moon-media process jobs/transcribe-... --mode knowledge --clean --llm codex-cli
+
+# or do all of the above from a browser
+.venv/bin/pip install -e '.[web]'
+.venv/bin/moon-media serve        # → http://127.0.0.1:8765
 ```
 
 Every run creates `jobs/<job-id>/` with `transcript.md`,

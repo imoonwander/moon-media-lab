@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Moon Media Lab</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #181b22; --panel2: #1f232c; --border: #2a2f3a;
+    --text: #e6e9ef; --muted: #8b93a5; --accent: #7aa2f7; --ok: #9ece6a;
+    --warn: #e0af68; --err: #f7768e;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Segoe UI", sans-serif; }
+  header { padding: 16px 24px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: baseline; gap: 12px; }
+  header h1 { font-size: 18px; margin: 0; }
+  header .muted { color: var(--muted); font-size: 12px; }
+  main { display: grid; grid-template-columns: 380px 1fr; gap: 16px;
+    padding: 16px 24px; max-width: 1400px; margin: 0 auto; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; }
+  .panel h2 { font-size: 13px; margin: 0 0 12px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .08em; }
+  label { display: block; margin: 10px 0 4px; color: var(--muted); font-size: 12px; }
+  input[type=text], select { width: 100%; padding: 8px 10px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--panel2); color: var(--text); }
+  input[type=file] { color: var(--muted); font-size: 12px; }
+  .row { display: flex; gap: 10px; }
+  .row > div { flex: 1; }
+  button { padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--accent); color: #10131a; font-weight: 600; cursor: pointer; }
+  button.secondary { background: var(--panel2); color: var(--text); font-weight: 400; }
+  button:disabled { opacity: .5; cursor: default; }
+  .check { display: flex; align-items: center; gap: 8px; margin-top: 10px;
+    color: var(--text); font-size: 13px; }
+  .job { padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
+    margin-bottom: 8px; cursor: pointer; background: var(--panel2); }
+  .job:hover { border-color: var(--accent); }
+  .job.active { border-color: var(--accent); }
+  .job .title { font-size: 13px; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; }
+  .job .meta { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+  .chip { font-size: 11px; padding: 1px 8px; border-radius: 999px;
+    background: var(--border); color: var(--muted); }
+  .chip.done { background: #1d2b1f; color: var(--ok); }
+  .chip.failed, .chip.postprocess_failed { background: #33202a; color: var(--err); }
+  .chip.transcribing, .chip.downloading, .chip.extracting,
+  .chip.postprocessing, .chip.preparing { background: #2a2618; color: var(--warn); }
+  .bar { height: 4px; background: var(--border); border-radius: 2px;
+    margin-top: 6px; overflow: hidden; }
+  .bar > div { height: 100%; background: var(--accent); transition: width .5s; }
+  #detail .seg { display: flex; gap: 10px; padding: 6px 8px; border-radius: 6px; }
+  #detail .seg:hover { background: var(--panel2); }
+  .ts { color: var(--accent); cursor: pointer; font-family: ui-monospace, monospace;
+    font-size: 12px; white-space: nowrap; }
+  .spk { color: var(--warn); font-size: 12px; white-space: nowrap; }
+  .artifacts a { color: var(--accent); text-decoration: none; margin-right: 12px;
+    font-size: 12px; }
+  audio { width: 100%; margin: 10px 0; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .empty { color: var(--muted); padding: 30px 0; text-align: center; }
+  #toast { position: fixed; bottom: 20px; right: 20px; background: var(--panel2);
+    border: 1px solid var(--border); padding: 10px 16px; border-radius: 8px;
+    display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🌙 Moon Media Lab</h1>
+  <span class="muted" id="version"></span>
+  <span class="muted" id="queueinfo"></span>
+</header>
+<main>
+  <div>
+    <div class="panel">
+      <h2>新任务</h2>
+      <label>媒体来源（URL 或本地路径）</label>
+      <input type="text" id="source" placeholder="https://... 或 /path/to/file.m4a">
+      <label>或上传文件</label>
+      <input type="file" id="file">
+      <div class="row">
+        <div>
+          <label>语言</label>
+          <select id="language">
+            <option value="zh">中文</option>
+            <option value="en">英文</option>
+            <option value="auto">自动</option>
+            <option value="mixed">中英混合</option>
+          </select>
+        </div>
+        <div>
+          <label>后处理</label>
+          <select id="mode">
+            <option value="transcript">仅转写</option>
+            <option value="knowledge">知识笔记</option>
+            <option value="english-study">英语学习</option>
+            <option value="skill">SOP 草稿</option>
+          </select>
+        </div>
+      </div>
+      <div class="check">
+        <input type="checkbox" id="diarization"><label for="diarization"
+          style="margin:0">说话人分离（中文，较慢）</label>
+      </div>
+      <div style="margin-top:14px">
+        <button id="submit">开始转写</button>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:16px">
+      <h2>任务列表</h2>
+      <div id="jobs"><div class="empty">暂无任务</div></div>
+    </div>
+  </div>
+  <div class="panel" id="detail">
+    <h2 id="detail-title">任务详情</h2>
+    <div class="empty">选择左侧任务查看</div>
+  </div>
+</main>
+<div id="toast"></div>
+<script>
+const $ = (s) => document.querySelector(s);
+let currentJob = null;
+let segmentsLoadedFor = null;
+
+function toast(msg) {
+  const el = $("#toast");
+  el.textContent = msg; el.style.display = "block";
+  setTimeout(() => el.style.display = "none", 3000);
+}
+function fmtTs(sec) {
+  sec = Math.floor(sec);
+  const h = String(Math.floor(sec / 3600)).padStart(2, "0");
+  const m = String(Math.floor(sec % 3600 / 60)).padStart(2, "0");
+  const s = String(sec % 60).padStart(2, "0");
+  return `${h}:${m}:${s}`;
+}
+
+async function refresh() {
+  try {
+    const [status, jobsRes] = await Promise.all([
+      fetch("/api/status").then(r => r.json()),
+      fetch("/api/jobs").then(r => r.json()),
+    ]);
+    $("#version").textContent = "v" + status.version;
+    $("#queueinfo").textContent = status.queue.length
+      ? `队列中 ${status.queue.length} 个任务` : "";
+    renderJobs(jobsRes.jobs);
+    if (currentJob) renderDetailState(jobsRes.jobs.find(j => j.id === currentJob));
+  } catch (e) { /* server restarting */ }
+}
+
+function renderJobs(jobs) {
+  const box = $("#jobs");
+  if (!jobs.length) { box.innerHTML = '<div class="empty">暂无任务</div>'; return; }
+  box.innerHTML = "";
+  for (const job of jobs) {
+    const div = document.createElement("div");
+    div.className = "job" + (job.id === currentJob ? " active" : "");
+    const src = job.state.source || (job.input && job.input.media.source) || job.id;
+    const pct = job.state.percent;
+    div.innerHTML = `
+      <div class="title">${src.split("/").pop()}</div>
+      <div class="meta">
+        <span class="chip ${job.status}">${job.status}</span>
+        <span class="muted" style="font-size:11px">${job.id.replace("transcribe-","")}</span>
+        ${job.state.eta_sec ? `<span class="muted" style="font-size:11px">eta ${fmtTs(job.state.eta_sec)}</span>` : ""}
+      </div>
+      ${pct != null && job.status !== "done" ? `<div class="bar"><div style="width:${pct}%"></div></div>` : ""}`;
+    div.onclick = () => openJob(job.id);
+    box.appendChild(div);
+  }
+}
+
+async function openJob(id) {
+  currentJob = id; segmentsLoadedFor = null;
+  await refresh();
+  loadSegments(id);
+}
+
+function renderDetailState(job) {
+  if (!job) return;
+  $("#detail-title").textContent = `${job.id} — ${job.status}` +
+    (job.state.chunks_total ? ` (${job.state.chunks_done || 0}/${job.state.chunks_total})` : "");
+  if (job.status === "done" && segmentsLoadedFor !== job.id) loadSegments(job.id);
+}
+
+async function loadSegments(id) {
+  const detail = $("#detail");
+  const jobRes = await fetch(`/api/jobs/${id}`).then(r => r.json());
+  let html = `<h2 id="detail-title">${id} — ${jobRes.status}</h2>`;
+  html += `<div class="artifacts">` + jobRes.artifacts
+    .filter(a => a !== "audio.wav" && a !== "state.json")
+    .map(a => `<a href="/api/jobs/${id}/file/${a}" target="_blank">${a}</a>`).join("") + `</div>`;
+  if (jobRes.artifacts.includes("audio.wav")) {
+    html += `<audio controls preload="none" src="/api/jobs/${id}/file/audio.wav"></audio>`;
+  }
+  html += `<div class="actions">
+    <button class="secondary" onclick="proc('${id}',{mode:'knowledge'})">生成知识笔记</button>
+    <button class="secondary" onclick="proc('${id}',{clean:true})">清理全文</button>
+    <button class="secondary" onclick="proc('${id}',{name_speakers:true})">说话人命名</button>
+    <button class="secondary" onclick="resumeJob('${id}')">续跑</button>
+  </div>`;
+  const segRes = await fetch(`/api/jobs/${id}/segments`);
+  if (segRes.ok) {
+    const data = await segRes.json();
+    html += `<div style="margin-top:12px">`;
+    for (const seg of data.segments) {
+      html += `<div class="seg">
+        <span class="ts" data-t="${seg.start}">${fmtTs(seg.start)}</span>
+        ${seg.speaker ? `<span class="spk">${seg.speaker}</span>` : ""}
+        <span>${seg.text}</span></div>`;
+    }
+    html += `</div>`;
+  } else {
+    html += `<div class="empty">转写进行中，完成后显示分段文本</div>`;
+  }
+  detail.innerHTML = html;
+  segmentsLoadedFor = id;
+  detail.querySelectorAll(".ts").forEach(el => el.onclick = () => {
+    const audio = detail.querySelector("audio");
+    if (audio) { audio.currentTime = +el.dataset.t; audio.play(); }
+  });
+}
+
+async function proc(id, opts) {
+  const res = await fetch(`/api/jobs/${id}/process`, {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(Object.assign({llm: "auto"}, opts)),
+  });
+  toast(res.ok ? "已加入队列" : "提交失败: " + (await res.text()));
+}
+async function resumeJob(id) {
+  const res = await fetch(`/api/jobs/${id}/resume`, {method: "POST"});
+  toast(res.ok ? "续跑已加入队列" : "提交失败");
+}
+
+$("#submit").onclick = async () => {
+  let source = $("#source").value.trim();
+  const fileInput = $("#file");
+  $("#submit").disabled = true;
+  try {
+    if (!source && fileInput.files.length) {
+      const form = new FormData();
+      form.append("file", fileInput.files[0]);
+      toast("上传中...");
+      const up = await fetch("/api/upload", {method: "POST", body: form}).then(r => r.json());
+      source = up.path;
+    }
+    if (!source) { toast("请输入 URL/路径或选择文件"); return; }
+    const res = await fetch("/api/jobs", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        source,
+        language: $("#language").value,
+        mode: $("#mode").value,
+        diarization: $("#diarization").checked,
+      }),
+    });
+    if (res.ok) { toast("任务已提交"); $("#source").value = ""; fileInput.value = ""; }
+    else toast("提交失败: " + (await res.text()));
+  } finally { $("#submit").disabled = false; }
+};
+
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>
