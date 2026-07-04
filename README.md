@@ -1,80 +1,119 @@
-# moon_media_lab
+# Moon Media Lab
 
-`moon_media_lab` is an open-source-oriented media processing lab.
+Local-first media lab: turn audio, video, and online media into
+transcripts, subtitles, knowledge notes, study material — and voice.
 
-The product goal is not only transcription. It should become a cross-platform system that turns local or online media into text, knowledge, learning materials, reusable workflows, and eventually voice output.
+```text
+file / YouTube / Bilibili / Douyin / direct URL
+        │
+        ▼
+  transcribe (SenseVoice · Paraformer+CAM++ · faster-whisper)
+        │
+        ▼
+  transcript.md + segments.srt/vtt  (timestamps, speakers)
+        │
+        ▼
+  process (any LLM CLI you already have)
+        │
+        ▼
+  knowledge.md · english-study.md · skill-draft.md · transcript.clean.md
+```
 
-## Scope
+Speech recognition runs **entirely on your machine**. LLM post-processing
+is opt-in and goes through whichever CLI you already use (`claude`,
+`codex`, `gemini`); every output records which provider saw the data in
+`postproc/provenance.json`.
 
-- Local audio/video to text
-- Online media URL to text
-- Chinese and English ASR routing
-- Text to speech
-- Transcript cleanup and normalization
-- Knowledge notes, English study notes, and Skill/SOP drafts
-- CLI first, with room for later Rust core and macOS/Windows GUI packaging
+## Features
+
+- **Chinese ASR** — SenseVoice (fast) or Paraformer + CAM++ with
+  `--diarization` for speaker-labeled interviews
+- **English ASR** — faster-whisper `large-v3-turbo` with per-segment
+  timestamps and confidence
+- **Speaker naming** — `process --name-speakers` turns `SPEAKER_00`
+  into inferred names/roles and re-renders transcript + subtitles
+- **Online media** — `transcribe <url>` downloads via yt-dlp
+  (YouTube/Bilibili need browser cookies); Douyin uses a built-in
+  cookie-free direct downloader
+- **Long media** — silence-aligned chunking, per-chunk checkpoints,
+  `resume <job-dir>`, progress/ETA, `transcript.partial.md` while running
+- **Playlists** — `--playlist [--playlist-items 1-5]`, one job per entry
+- **Subtitles** — `segments.srt` / `segments.vtt` for every job
+- **LLM post-processing** — summary/outline/knowledge cards, English
+  study notes, SOP drafts, batched+concurrent transcript cleanup
+- **TTS** — `moon-media tts` via Edge neural voices
+- **Self-contained models** — `models list|download|prune`, resumable
+  downloads, `--mirror` for hf-mirror.com; nothing writes to `~/.cache`
+
+## Install
+
+Requires Python 3.9+ (3.10+ recommended) and [ffmpeg](https://ffmpeg.org).
+
+```bash
+git clone <repo-url> && cd moon_media_lab
+python3 -m venv .venv
+.venv/bin/pip install -e '.[asr-sensevoice,asr-whisper,url,tts-edge]'
+.venv/bin/moon-media doctor
+```
+
+Pick only the extras you need — the base CLI has zero dependencies.
+For URL ingestion a standalone `yt-dlp` binary on PATH is preferred
+(site extractors age quickly; the pip copy is pinned by your Python).
+
+## Quickstart
+
+```bash
+# bundled 8-second sample (Chinese)
+.venv/bin/moon-media transcribe examples/hello-zh.wav --language zh
+
+# a Chinese interview with speaker labels (first run downloads ~1.2 GB of models)
+.venv/bin/moon-media transcribe interview.m4a --language zh --diarization
+
+# an English podcast from YouTube (first run downloads ~1.6 GB; use --mirror in CN)
+.venv/bin/moon-media models download large-v3-turbo --mirror
+MOON_MEDIA_LAB_COOKIES_BROWSER=chrome \
+  .venv/bin/moon-media transcribe "https://youtu.be/..." --language en
+
+# post-process a finished job with the LLM CLI you already have
+.venv/bin/moon-media process jobs/transcribe-... --mode knowledge --clean --llm codex-cli
+```
+
+Every run creates `jobs/<job-id>/` with `transcript.md`,
+`transcript.raw.json`, `segments.srt/vtt`, `run.log`, and any
+post-processing outputs. The job folder is the API — nothing else to learn.
+
+## Configuration
+
+Everything lives in environment variables with project-local defaults;
+see [.env.example](.env.example). Highlights:
+
+```text
+MOON_MEDIA_LAB_HOME              root for models/cache/jobs/downloads/output
+MOON_MEDIA_LAB_DEVICE            cpu (default) or cuda
+MOON_MEDIA_LAB_WHISPER_MODEL     large-v3-turbo (default) | small | medium | ...
+MOON_MEDIA_LAB_LLM_PROVIDER      claude-cli | codex-cli | gemini-cli | mock
+MOON_MEDIA_LAB_LLM_CONCURRENCY   parallel cleanup calls (default 3)
+MOON_MEDIA_LAB_COOKIES_BROWSER   chrome | firefox | ... for bot-checked sites
+MOON_MEDIA_LAB_HF_ENDPOINT       e.g. https://hf-mirror.com
+```
 
 ## Documentation
 
-Start here:
-
-- [Agent Handoff](docs/agent-handoff.md)
-- [Product Brief](docs/product-brief.md)
+- [CLI reference](docs/cli-v1-spec.md)
 - [Architecture](docs/architecture.md)
-- [Runtime and Models](docs/runtime-and-models.md)
-- [Engine Adapter Spec](docs/engine-adapter-spec.md)
-- [CLI v1 Spec](docs/cli-v1-spec.md)
-- [Open Source Engineering Notes](docs/open-source-engineering.md)
+- [Engine adapter spec](docs/engine-adapter-spec.md) — add your own engine
+- [Runtime & models](docs/runtime-and-models.md)
 - [Roadmap](docs/roadmap.md)
+- [Contributing](CONTRIBUTING.md)
 
-## Runtime Principle
+## Acknowledgements
 
-All runtime assets should be configurable and local to the project by default:
+- [FunASR](https://github.com/modelscope/FunASR) — SenseVoice, Paraformer, CAM++
+- [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp)
+- Douyin direct-download technique from
+  [vangie/douyin-transcriber](https://github.com/vangie/douyin-transcriber) (MIT)
 
-```text
-products/moon_media_lab/
-  models/      ASR/TTS model files
-  cache/       Hugging Face / ModelScope / torch / tool cache
-  jobs/        per-run job folders
-  downloads/   downloaded online media
-  output/      exported artifacts
-```
+## License
 
-Use `.env.example` as the default local configuration template.
-
-## Current State
-
-Phase 1 (Chinese ASR) is implemented and validated:
-
-- SenseVoice/FunASR engine behind the ASR adapter (`--engine sensevoice`)
-- faster-whisper engine for English (`large-v3-turbo`, per-segment timestamps)
-- speaker diarization for Chinese: `--diarization` routes to
-  paraformer-zh + CAM++ and labels segments with `SPEAKER_NN`;
-  `process --name-speakers` turns labels into inferred names/roles
-- URL ingestion: `moon-media transcribe <url>` downloads via yt-dlp first
-- ffmpeg media probe and 16 kHz mono wav extraction
-- language routing (`zh` -> sensevoice, `en`/`mixed` -> faster-whisper)
-- project-local ModelScope/HF caches, no writes to global `~/.cache`
-- CLI exit codes and actionable error hints per `docs/cli-v1-spec.md`
-- long media: automatic chunking with checkpoints, progress/ETA, and
-  `moon-media resume <job-dir>` to continue interrupted jobs
-- playlist mode: `--playlist [--playlist-items 1-5]` transcribes every
-  entry of a multi-part video or playlist, one job per entry
-- subtitles: `segments.srt` / `segments.vtt` generated for every job
-- `moon-media models list|download|prune` with `--mirror` support and
-  resumable downloads (Douyin direct downloads work without cookies)
-- LLM post-processing via provider adapters (`claude-cli` today, `mock`
-  for tests): `moon-media process <job-dir> --mode knowledge --clean`
-  turns a finished transcript into knowledge notes and a cleaned
-  readable transcript; `postproc/provenance.json` records which
-  provider saw the data
-
-Quick start:
-
-```bash
-python -m venv .venv && .venv/bin/pip install -e '.[asr-sensevoice]'
-.venv/bin/moon-media doctor --engine sensevoice
-.venv/bin/moon-media transcribe path/to/audio.m4a --language zh
-```
-
-Phase 2 (faster-whisper for English) is the next milestone. TTS engines are still mock.
+[MIT](LICENSE)

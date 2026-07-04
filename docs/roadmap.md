@@ -110,6 +110,10 @@ Remaining:
 
 ## Phase 5: TTS
 
+Status: core done (2026-07-04). `moon-media tts` synthesizes via
+edge-tts (default voice zh-CN-XiaoxiaoNeural, override with --voice or
+MOON_MEDIA_LAB_TTS_VOICE). The mock engine remains for tests.
+
 Goal:
 
 ```text
@@ -118,8 +122,8 @@ text -> voice output
 
 Engines:
 
-- Edge TTS
-- OpenAI TTS
+- Edge TTS (done)
+- OpenAI TTS (planned)
 - local TTS later
 
 ## Phase 6: Rust Core

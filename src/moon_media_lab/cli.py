@@ -161,6 +161,7 @@ def command_tts(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="moon-media", description="Moon Media Lab CLI")
+    parser.add_argument("--version", action="version", version=f"moon-media-lab {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     doctor = subparsers.add_parser("doctor", help="Print project paths and check tooling")
