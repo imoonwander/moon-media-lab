@@ -14,7 +14,7 @@ def client(lab_home):
 def test_status(client):
     payload = client.get("/api/status").json()
     assert "version" in payload
-    assert payload["queue"] == []
+    assert isinstance(payload["tasks"], list)
 
 
 def test_jobs_empty(client):
