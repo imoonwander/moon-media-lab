@@ -82,7 +82,10 @@ Runs LLM post-processing on a finished transcribe job:
 
 ```text
 --mode knowledge|english-study|skill        generate the mode document
---clean                                     produce transcript.clean.md (batched, checkpointed)
+--clean                                     produce transcript.clean.md (batched, checkpointed,
+                                            concurrent; MOON_MEDIA_LAB_LLM_CONCURRENCY, default 3)
+--name-speakers                             infer names/roles for SPEAKER_NN labels and
+                                            re-render transcript.md + subtitles
 --llm auto|claude-cli|codex-cli|gemini-cli|mock   LLM provider adapter
 ```
 

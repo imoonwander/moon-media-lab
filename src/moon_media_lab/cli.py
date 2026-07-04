@@ -90,19 +90,27 @@ def command_resume(args: argparse.Namespace) -> int:
 
 def command_process(args: argparse.Namespace) -> int:
     from moon_media_lab.llm.registry import get_llm_provider
-    from moon_media_lab.postproc.runner import clean_transcript, generate_mode_doc, load_result
+    from moon_media_lab.postproc.runner import (
+        clean_transcript,
+        generate_mode_doc,
+        load_result,
+        name_speakers,
+    )
 
     job_dir = Path(args.job_dir)
     result = load_result(job_dir)
     provider = get_llm_provider(args.llm)
     outputs = []
+    if args.name_speakers:
+        outputs.append(name_speakers(result, provider, job_dir))
     if args.clean:
         outputs.append(clean_transcript(result, provider, job_dir))
     if args.mode:
         outputs.append(generate_mode_doc(result, args.mode, provider, job_dir))
     if not outputs:
         raise InvalidArguments(
-            "Nothing to do.", hint="Pass --mode knowledge|english-study|skill and/or --clean."
+            "Nothing to do.",
+            hint="Pass --mode knowledge|english-study|skill, --clean, and/or --name-speakers.",
         )
     for output in outputs:
         print(output)
@@ -205,6 +213,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     process.add_argument(
         "--clean", action="store_true", help="Produce transcript.clean.md (batched cleanup)"
+    )
+    process.add_argument(
+        "--name-speakers",
+        action="store_true",
+        help="Infer names/roles for SPEAKER_NN labels and re-render transcript/subtitles",
     )
     process.add_argument("--llm", default="auto", help="LLM provider (claude-cli|mock)")
     process.set_defaults(func=command_process)

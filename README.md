@@ -49,7 +49,8 @@ Phase 1 (Chinese ASR) is implemented and validated:
 - SenseVoice/FunASR engine behind the ASR adapter (`--engine sensevoice`)
 - faster-whisper engine for English (`large-v3-turbo`, per-segment timestamps)
 - speaker diarization for Chinese: `--diarization` routes to
-  paraformer-zh + CAM++ and labels segments with `SPEAKER_NN`
+  paraformer-zh + CAM++ and labels segments with `SPEAKER_NN`;
+  `process --name-speakers` turns labels into inferred names/roles
 - URL ingestion: `moon-media transcribe <url>` downloads via yt-dlp first
 - ffmpeg media probe and 16 kHz mono wav extraction
 - language routing (`zh` -> sensevoice, `en`/`mixed` -> faster-whisper)

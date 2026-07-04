@@ -47,6 +47,8 @@ class ParaformerEngine(ASREngine):
         from funasr import AutoModel
 
         try:
+            # Keep FunASR's tqdm visible: diarization runs are long single
+            # passes and this is the only live progress signal.
             self._model = AutoModel(
                 model=self.model_dir or ASR_MODEL,
                 vad_model=VAD_MODEL,
@@ -54,7 +56,7 @@ class ParaformerEngine(ASREngine):
                 spk_model=SPK_MODEL,
                 device=self.device,
                 disable_update=True,
-                disable_pbar=True,
+                disable_pbar=os.environ.get("MOON_MEDIA_LAB_QUIET") == "1",
                 log_level="ERROR",
             )
         except Exception as exc:  # noqa: BLE001

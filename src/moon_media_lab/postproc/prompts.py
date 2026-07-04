@@ -72,6 +72,21 @@ Fragment:
 {text}
 """
 
+SPEAKER_NAMING = """\
+Below are sample utterances from a diarized transcript, grouped by speaker label.
+Infer who each speaker is from context: use a real name if it is mentioned or
+strongly implied, otherwise a role (e.g. 主持人 / 嘉宾 / 记者 / interviewer).
+Use the transcript's language for the names.
+
+Respond with ONLY a JSON object mapping each label to a short name, e.g.
+{{"SPEAKER_00": "主持人", "SPEAKER_01": "向佐"}}
+No markdown fences, no explanations.
+
+Samples:
+
+{samples}
+"""
+
 MODE_PROMPTS = {
     "knowledge": KNOWLEDGE,
     "english-study": ENGLISH_STUDY,
