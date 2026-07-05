@@ -77,6 +77,28 @@
   .artifacts { margin: 10px 0; }
   .artifacts a { color: var(--accent); text-decoration: none; margin-right: 12px;
     font-size: 12px; }
+  .tabs { display: flex; gap: 4px; margin-top: 12px; border-bottom: 1px solid var(--border);
+    flex-wrap: wrap; }
+  .tab { padding: 6px 14px; font-size: 13px; color: var(--muted); cursor: pointer;
+    border: 1px solid transparent; border-bottom: none;
+    border-radius: 8px 8px 0 0; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--text); background: var(--panel2);
+    border-color: var(--border); }
+  #viewer { margin-top: 0; }
+  .md { padding: 14px 18px; border: 1px solid var(--border); border-top: none;
+    border-radius: 0 0 8px 8px; max-height: 62vh; overflow-y: auto;
+    background: var(--panel2); }
+  .md h1 { font-size: 18px; } .md h2 { font-size: 16px; margin: 18px 0 8px;
+    color: var(--accent); } .md h3 { font-size: 14px; margin: 14px 0 6px; }
+  .md table { border-collapse: collapse; margin: 8px 0; font-size: 13px; }
+  .md th, .md td { border: 1px solid var(--border); padding: 4px 10px;
+    text-align: left; }
+  .md th { background: var(--panel); }
+  .md li { margin: 2px 0; }
+  .md code { background: var(--panel); padding: 1px 5px; border-radius: 4px;
+    font-size: 12px; }
+  .md .ts { cursor: pointer; }
   audio { width: 100%; margin: 8px 0; }
   .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
   .empty { color: var(--muted); padding: 24px 0; text-align: center; font-size: 13px; }
@@ -281,31 +303,132 @@ async function loadDetail(id) {
     html += `<audio id="player" controls preload="none" src="/api/jobs/${id}/file/audio.wav"></audio>`;
   }
 
-  const segRes = await fetch(`/api/jobs/${id}/segments`);
-  if (segRes.ok) {
-    const data = await segRes.json();
-    html += `<div><span class="follow" id="follow-toggle">跟随播放 ✓</span></div>`;
-    html += `<div id="segments">`;
-    for (let i = 0; i < data.segments.length; i++) {
-      const seg = data.segments[i];
-      html += `<div class="seg" data-i="${i}" data-t="${seg.start}" data-e="${seg.end}">
-        <span class="ts">${fmtTs(seg.start)}</span>
-        ${seg.speaker ? `<span class="spk">${seg.speaker}</span>` : ""}
-        <span>${seg.text}</span></div>`;
-    }
-    html += `</div>`;
-  } else if (has("transcript.partial.md")) {
-    const partial = await fetch(`/api/jobs/${id}/file/transcript.partial.md`).then(r => r.text());
-    html += `<div class="muted" style="margin-top:10px">转写进行中，以下为已完成部分：</div>
-      <pre style="white-space:pre-wrap;font:inherit">${partial.slice(0, 20000)}</pre>`;
-  } else if (busy) {
-    html += `<div class="empty">任务执行中（${zh(eff)}），完成后此处显示分段文本</div>`;
-  } else {
-    html += `<div class="empty">尚无转写结果</div>`;
-  }
+  // Preview tabs: segments plus any generated markdown artifacts.
+  const MD_TABS = [
+    ["knowledge.md", "知识笔记"],
+    ["transcript.clean.md", "清理全文"],
+    ["english-study.md", "英语学习"],
+    ["skill-draft.md", "SOP 草稿"],
+  ];
+  const tabs = [["segments", "分段文本"]].concat(MD_TABS.filter(([f]) => has(f)));
+  html += `<div class="tabs">` + tabs.map(([key, label], i) =>
+    `<div class="tab${i === 0 ? " active" : ""}" data-tab="${key}">${label}</div>`
+  ).join("") + `</div><div id="viewer"></div>`;
+
   detail.innerHTML = html;
   segmentsFor = id;
   bindDetail(id);
+  showTab(id, "segments", {busy, eff, hasPartial: has("transcript.partial.md")});
+  detail.querySelectorAll(".tab").forEach(el => el.onclick = () => {
+    detail.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+    el.classList.add("active");
+    showTab(id, el.dataset.tab, {busy, eff, hasPartial: has("transcript.partial.md")});
+  });
+}
+
+async function showTab(id, tab, ctx) {
+  const viewer = $("#viewer");
+  if (tab === "segments") {
+    const segRes = await fetch(`/api/jobs/${id}/segments`);
+    if (segRes.ok) {
+      const data = await segRes.json();
+      let html = `<div><span class="follow" id="follow-toggle">跟随播放 ${follow ? "✓" : "✗"}</span></div>`;
+      html += `<div id="segments">`;
+      for (let i = 0; i < data.segments.length; i++) {
+        const seg = data.segments[i];
+        html += `<div class="seg" data-t="${seg.start}" data-e="${seg.end}">
+          <span class="ts">${fmtTs(seg.start)}</span>
+          ${seg.speaker ? `<span class="spk">${seg.speaker}</span>` : ""}
+          <span>${seg.text}</span></div>`;
+      }
+      viewer.innerHTML = html + `</div>`;
+      bindSegments();
+    } else if (ctx.hasPartial) {
+      const partial = await fetch(`/api/jobs/${id}/file/transcript.partial.md`).then(r => r.text());
+      viewer.innerHTML = `<div class="muted" style="margin-top:10px">转写进行中，以下为已完成部分：</div>
+        <pre style="white-space:pre-wrap;font:inherit">${escapeHtml(partial.slice(0, 20000))}</pre>`;
+    } else {
+      viewer.innerHTML = `<div class="empty">${ctx.busy ? `任务执行中（${zh(ctx.eff)}），完成后显示分段文本` : "尚无转写结果"}</div>`;
+    }
+  } else {
+    const text = await fetch(`/api/jobs/${id}/file/${tab}`).then(r => r.text());
+    viewer.innerHTML = `<div class="md">${renderMarkdown(text)}</div>`;
+    // Timestamps inside documents jump the audio player too.
+    viewer.querySelectorAll(".ts").forEach(el => el.onclick = () => {
+      const player = $("#player");
+      if (player) { player.currentTime = +el.dataset.t; player.play(); }
+    });
+  }
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// Minimal offline markdown renderer: headings, bold, code, lists, tables,
+// and clickable [hh:mm:ss] timestamps.
+function renderMarkdown(src) {
+  const inline = (s) => s
+    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\[?(\d{2}):(\d{2}):(\d{2})\]?/g, (m, h, mn, sc) =>
+      `<span class="ts" data-t="${(+h) * 3600 + (+mn) * 60 + (+sc)}">${h}:${mn}:${sc}</span>`);
+  const lines = escapeHtml(src).split("\n");
+  let html = "", listMode = null, tableRows = [];
+  const flushList = () => { if (listMode) { html += `</${listMode}>`; listMode = null; } };
+  const flushTable = () => {
+    if (!tableRows.length) return;
+    const rows = tableRows.filter(r => !/^\s*\|[\s\-|:]+\|\s*$/.test(r));
+    html += "<table>" + rows.map((r, i) => {
+      const cells = r.replace(/^\s*\||\|\s*$/g, "").split("|").map(c => inline(c.trim()));
+      const tag = i === 0 ? "th" : "td";
+      return `<tr>${cells.map(c => `<${tag}>${c}</${tag}>`).join("")}</tr>`;
+    }).join("") + "</table>";
+    tableRows = [];
+  };
+  for (const line of lines) {
+    if (/^\s*\|.*\|\s*$/.test(line)) { flushList(); tableRows.push(line); continue; }
+    flushTable();
+    const h = line.match(/^(#{1,4})\s+(.*)/);
+    if (h) { flushList(); html += `<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`; continue; }
+    const ol = line.match(/^\s*\d+[.、]\s+(.*)/);
+    const ul = line.match(/^\s*[-*]\s+(.*)/);
+    if (ol || ul) {
+      const want = ol ? "ol" : "ul";
+      if (listMode !== want) { flushList(); html += `<${want}>`; listMode = want; }
+      html += `<li>${inline((ol || ul)[1])}</li>`; continue;
+    }
+    flushList();
+    if (/^\s*---+\s*$/.test(line)) { html += "<hr>"; continue; }
+    if (line.trim() === "") continue;
+    html += `<p>${inline(line)}</p>`;
+  }
+  flushList(); flushTable();
+  return html;
+}
+
+function bindSegments() {
+  const detail = $("#detail");
+  const player = $("#player");
+  const toggle = $("#follow-toggle");
+  if (toggle) toggle.onclick = () => {
+    follow = !follow;
+    toggle.textContent = follow ? "跟随播放 ✓" : "跟随播放 ✗";
+  };
+  detail.querySelectorAll(".seg").forEach(el => el.onclick = () => {
+    if (player) { player.currentTime = +el.dataset.t; player.play(); }
+  });
+  if (player) player.ontimeupdate = () => {
+    const t = player.currentTime;
+    const segs = detail.querySelectorAll(".seg");
+    let hit = null;
+    for (const el of segs) {
+      const match = t >= +el.dataset.t && t < +el.dataset.e;
+      el.classList.toggle("playing", match);
+      if (match) hit = el;
+    }
+    if (hit && follow) hit.scrollIntoView({block: "center", behavior: "smooth"});
+  };
 }
 
 function bindDetail(id) {
@@ -331,25 +454,6 @@ function bindDetail(id) {
   if (resumeBtn) resumeBtn.onclick = async () => {
     const res = await fetch(`/api/jobs/${id}/resume`, {method: "POST"});
     toast(res.ok ? "续跑已加入队列" : "提交失败");
-  };
-  const toggle = $("#follow-toggle");
-  if (toggle) toggle.onclick = () => {
-    follow = !follow;
-    toggle.textContent = follow ? "跟随播放 ✓" : "跟随播放 ✗";
-  };
-  detail.querySelectorAll(".seg").forEach(el => el.onclick = () => {
-    if (player) { player.currentTime = +el.dataset.t; player.play(); }
-  });
-  if (player) player.ontimeupdate = () => {
-    const t = player.currentTime;
-    const segs = detail.querySelectorAll(".seg");
-    let hit = null;
-    for (const el of segs) {
-      const match = t >= +el.dataset.t && t < +el.dataset.e;
-      el.classList.toggle("playing", match);
-      if (match) hit = el;
-    }
-    if (hit && follow) hit.scrollIntoView({block: "center", behavior: "smooth"});
   };
 }
 
