@@ -1,5 +1,53 @@
 # Roadmap
 
+## Version lines
+
+Each minor series is one product theme. `main` is the CLI core line;
+big themes incubate on feature branches and merge as their own series.
+
+### 0.1.x — CLI core (current focus, branch: `main`)
+
+Goal: **the CLI converts video/audio excellently, is open-source ready,
+and works globally on your machine.**
+
+- [x] Chinese ASR (SenseVoice), English ASR (faster-whisper), diarization (paraformer+CAM++)
+- [x] URL ingestion (YouTube / Bilibili / Douyin / direct), playlists
+- [x] Long-media chunking, checkpoints, resume, progress
+- [x] LLM post-processing (knowledge / clean / speakers) via provider adapters
+- [x] Subtitles (srt/vtt), models management with mirror + resume
+- [ ] Global install story (pipx / uv tool), first-run experience polish
+- [ ] CLI stability hardening: clearer errors, edge cases from daily use
+- [ ] Public release: flip the repo public, announce
+- Note: the built-in web UI (`moon-media serve`) ships in 0.1.x as a
+  **beta preview**; its active development moved to the `web-ui` branch.
+
+### 0.2.x — Web experience (branch: `web-ui`)
+
+Goal: a web UI whose interaction quality matches the CLI's capability.
+
+- UI/UX redesign to expectation (current beta does not meet the bar)
+- Transcript reader experience (markdown reading, search, navigation)
+- Job management refinements, richer progress, mobile-friendly layout
+- Merges back to `main` and releases as the 0.2.x series when ready
+
+### 0.3.x — Voice and beyond
+
+- TTS as a real product line (edge-tts shipped early and idles in 0.1.x;
+  it graduates here: voices, batch narration, transcript-to-speech)
+- Reader/knowledge deepening, integrations (e.g. Lark), API providers
+- Later themes each get their own minor series (0.4.x, ...)
+
+## Branching
+
+- `main` — CLI core; stable; all tags/releases cut here
+- `web-ui` — web experience line; merges to main at series boundaries
+- short-lived feature branches as needed
+
+---
+
+# Phase history (original plan)
+
+
 ## Phase 0: Documentation and Skeleton
 
 Status: done.

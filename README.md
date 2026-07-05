@@ -44,10 +44,11 @@ is opt-in and goes through whichever CLI you already use (`claude`,
 - **TTS** — `moon-media tts` via Edge neural voices
 - **Self-contained models** — `models list|download|prune`, resumable
   downloads, `--mirror` for hf-mirror.com; nothing writes to `~/.cache`
-- **Web UI** — `moon-media serve` starts a local web app (submit
-  files/URLs, live progress, click-a-timestamp audio playback,
-  one-click post-processing); every job also writes a machine-readable
-  `state.json`, so the job folder stays the API
+- **Web UI (beta preview)** — `moon-media serve` starts a local web app
+  (submit files/URLs, live progress, click-a-timestamp audio playback,
+  inline previews, one-click post-processing); every job also writes a
+  machine-readable `state.json`, so the job folder stays the API.
+  Active web development happens on the `web-ui` branch (0.2.x line)
 
 ## Install
 
@@ -61,6 +62,13 @@ python3 -m venv .venv
 ```
 
 Pick only the extras you need — the base CLI has zero dependencies.
+
+**Global install** (use `moon-media` from anywhere):
+
+```bash
+pipx install 'moon-media-lab[asr-sensevoice,asr-whisper,url,tts-edge]'
+# or, from a clone: ln -s "$(pwd)/.venv/bin/moon-media" ~/.local/bin/moon-media
+```
 For URL ingestion a standalone `yt-dlp` binary on PATH is preferred
 (site extractors age quickly; the pip copy is pinned by your Python).
 
@@ -104,6 +112,20 @@ MOON_MEDIA_LAB_LLM_CONCURRENCY   parallel cleanup calls (default 3)
 MOON_MEDIA_LAB_COOKIES_BROWSER   chrome | firefox | ... for bot-checked sites
 MOON_MEDIA_LAB_HF_ENDPOINT       e.g. https://hf-mirror.com
 ```
+
+## Versioning & branches
+
+Each minor series is one product theme; small steps within a theme bump
+the patch version.
+
+| Series | Theme | Branch |
+|--------|-------|--------|
+| 0.1.x  | **CLI core** — excellent audio/video conversion, open-source ready, global install (current focus) | `main` |
+| 0.2.x  | **Web experience** — UI/UX rebuilt to expectation; merges from the `web-ui` branch | `web-ui` |
+| 0.3.x  | **Voice & beyond** — TTS as a product line, reader deepening, integrations | future |
+
+`main` stays stable and cuts all releases; big themes incubate on their
+own branch and land as a new series. See [Roadmap](docs/roadmap.md).
 
 ## Documentation
 
