@@ -61,9 +61,14 @@
   .chip.s-running, .chip.s-transcribing, .chip.s-downloading, .chip.s-extracting,
   .chip.s-postprocessing, .chip.s-preparing, .chip.s-queued {
     background: #2a2618; color: var(--warn); }
-  .bar { height: 4px; background: var(--border); border-radius: 2px;
-    margin-top: 6px; overflow: hidden; }
+  .bar { height: 6px; background: var(--border); border-radius: 3px;
+    margin-top: 8px; overflow: hidden; }
   .bar > div { height: 100%; background: var(--accent); transition: width .5s; }
+  .bar.indet > div { width: 30%; animation: slide 1.4s ease-in-out infinite; }
+  @keyframes slide { 0% { margin-left: -30%; } 100% { margin-left: 100%; } }
+  .pct { font-weight: 700; font-size: 15px; color: var(--accent);
+    font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .progress-label { font-size: 11px; color: var(--muted); margin-top: 3px; }
   .err-text { color: var(--err); font-size: 11px; margin-top: 4px; word-break: break-all; }
   #segments { margin-top: 12px; max-height: 60vh; overflow-y: auto;
     border: 1px solid var(--border); border-radius: 8px; padding: 4px; }
@@ -147,6 +152,13 @@
         <input type="checkbox" id="diarization">
         <label for="diarization" style="margin:0">说话人分离（中文对谈/访谈，耗时约为音频的 1/3）</label>
       </div>
+      <label>LLM（用于知识笔记/清理等）</label>
+      <select id="llm">
+        <option value="codex-cli">Codex CLI</option>
+        <option value="claude-cli">Claude CLI</option>
+        <option value="gemini-cli">Gemini CLI</option>
+        <option value="auto">跟随环境变量（auto）</option>
+      </select>
       <div style="margin-top:14px"><button id="submit">开始转写</button></div>
     </div>
     <div class="panel">
@@ -189,6 +201,27 @@ function fmtTs(sec) {
 // A job is "live" when a queued/running task is bound to it.
 function liveTask(jobId) { return taskByJob[jobId]; }
 
+// Progress for an active job: exact percent when the pipeline reports one,
+// estimated percent for single-pass stages, elapsed timer otherwise.
+function progressOf(job, eff) {
+  if (!ACTIVE_STATES.includes(eff) || eff === "queued") return null;
+  const st = job.state;
+  const now = Date.now() / 1000;
+  const elapsed = st.started_at ? `已运行 ${fmtTs(now - st.started_at)}` : "";
+  if (typeof st.percent === "number") {
+    const extra = [];
+    if (st.chunks_total) extra.push(`${st.chunks_done || 0}/${st.chunks_total} 块`);
+    if (st.eta_sec) extra.push(`剩余约 ${fmtTs(st.eta_sec)}`);
+    return {pct: st.percent, text: `${st.percent}%`, label: extra.join(" · ") || elapsed};
+  }
+  if (st.stage_started_at && st.estimated_runtime_sec) {
+    const p = Math.min(95, Math.round((now - st.stage_started_at) / st.estimated_runtime_sec * 100));
+    const remain = Math.max(0, st.estimated_runtime_sec - (now - st.stage_started_at));
+    return {pct: p, text: `≈${p}%`, label: `估算 · 剩余约 ${fmtTs(remain)}`};
+  }
+  return {pct: null, text: "", label: elapsed};
+}
+
 function effectiveStatus(job) {
   const live = liveTask(job.id);
   if (ACTIVE_STATES.includes(job.status) && !live) return "stalled";
@@ -229,23 +262,21 @@ function renderJobs(jobs) {
     const st = job.state;
     const eff = effectiveStatus(job);
     const live = liveTask(job.id);
-    let progress = "";
-    if (st.chunks_total && eff === "transcribing") {
-      progress = `${st.chunks_done || 0}/${st.chunks_total} 块` +
-        (st.eta_sec ? ` · 剩余约 ${fmtTs(st.eta_sec)}` : "");
-    }
+    const prog = progressOf(job, eff);
     div.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px">
         <div class="title" style="flex:1">${src}</div>
+        ${prog && prog.text ? `<span class="pct">${prog.text}</span>` : ""}
         ${live ? `<button class="danger" data-cancel="${job.id}">取消</button>` : ""}
       </div>
       <div class="meta">
         <span class="chip s-${eff}">${zh(eff)}</span>
         <span class="muted" style="font-size:11px">${job.id.replace("transcribe-", "")}</span>
-        ${progress ? `<span class="muted" style="font-size:11px">${progress}</span>` : ""}
       </div>
-      ${st.percent != null && !["done", "cancelled", "stalled"].includes(eff)
-        ? `<div class="bar"><div style="width:${st.percent}%"></div></div>` : ""}
+      ${prog ? (prog.pct != null
+        ? `<div class="bar"><div style="width:${prog.pct}%"></div></div>`
+        : `<div class="bar indet"><div></div></div>`) : ""}
+      ${prog && prog.label ? `<div class="progress-label">${prog.label}</div>` : ""}
       ${st.error ? `<div class="err-text">${String(st.error).slice(0, 160)}</div>` : ""}`;
     div.onclick = () => openJob(job.id);
     box.appendChild(div);
@@ -262,7 +293,10 @@ function renderJobs(jobs) {
 function updateDetailHeader(job) {
   const h = $("#detail-status");
   const eff = effectiveStatus(job);
-  if (h) h.innerHTML = `<span class="chip s-${eff}">${zh(eff)}</span>`;
+  const prog = progressOf(job, eff);
+  if (h) h.innerHTML = `<span class="chip s-${eff}">${zh(eff)}</span>`
+    + (prog && prog.text ? ` <span class="pct">${prog.text}</span>` : "")
+    + (prog && prog.label ? ` <span class="muted" style="font-size:11px">${prog.label}</span>` : "");
   if (job.status === "done" && segmentsFor !== job.id) loadDetail(job.id);
 }
 
@@ -439,7 +473,7 @@ function bindDetail(id) {
     if (confirmMsg && !window.confirm(confirmMsg)) return;
     const res = await fetch(`/api/jobs/${id}/process`, {
       method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify(Object.assign({llm: "auto"}, JSON.parse(btn.dataset.proc))),
+      body: JSON.stringify(Object.assign({llm: currentLLM()}, JSON.parse(btn.dataset.proc))),
     });
     toast(res.ok ? "已加入执行队列" : "提交失败：" + (await res.text()).slice(0, 120));
   });
@@ -477,12 +511,17 @@ $("#submit").onclick = async () => {
         language: $("#language").value,
         mode: $("#mode").value,
         diarization: $("#diarization").checked,
+        llm: currentLLM(),
       }),
     });
     if (res.ok) { toast("已提交，任务卡片见左侧列表"); $("#source").value = ""; fileInput.value = ""; }
     else toast("提交失败：" + (await res.text()).slice(0, 120));
   } finally { $("#submit").disabled = false; }
 };
+
+function currentLLM() { return $("#llm").value; }
+$("#llm").value = localStorage.getItem("mml_llm") || "codex-cli";
+$("#llm").onchange = () => localStorage.setItem("mml_llm", $("#llm").value);
 
 refresh();
 setInterval(refresh, 2000);

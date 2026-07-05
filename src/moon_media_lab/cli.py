@@ -107,7 +107,15 @@ def command_process(args: argparse.Namespace) -> int:
             "Nothing to do.",
             hint="Pass --mode knowledge|english-study|skill, --clean, and/or --name-speakers.",
         )
-    update_state(job_dir, "postprocessing")
+    import time as _time
+
+    update_state(
+        job_dir,
+        "postprocessing",
+        percent=None,
+        eta_sec=None,
+        stage_started_at=int(_time.time()),
+    )
     outputs = []
     try:
         if args.name_speakers:

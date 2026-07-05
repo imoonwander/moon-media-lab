@@ -6,9 +6,11 @@ from typing import Callable, Optional
 
 from moon_media_lab.errors import PostProcessFailed
 
-DEFAULT_TIMEOUT_SEC = 900
-MAX_ATTEMPTS = 3
-RETRY_DELAY_SEC = 20
+# Long enough for a big knowledge doc, short enough that a hung proxy
+# connection fails visibly instead of blocking the queue for an hour.
+DEFAULT_TIMEOUT_SEC = 300
+MAX_ATTEMPTS = 2
+RETRY_DELAY_SEC = 15
 
 
 def complete_via_cli(

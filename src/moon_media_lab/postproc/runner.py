@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from moon_media_lab.errors import InvalidArguments
-from moon_media_lab.jobs import append_log, write_json
+from moon_media_lab.jobs import append_log, update_state, write_json
 from moon_media_lab.llm.base import LLMProvider
 from moon_media_lab.postproc.prompts import CLEANUP, MODE_PROMPTS, SPEAKER_NAMING, SYSTEM
 from moon_media_lab.schema import (
@@ -226,6 +226,12 @@ def clean_transcript(
                     elapsed = time.perf_counter() - run_started
                     eta = elapsed / done_count * (len(pending) - done_count)
                     batch = batches[index]
+                    update_state(
+                        job_dir,
+                        "postprocessing",
+                        percent=round(len(cleaned) / total * 100),
+                        eta_sec=round(eta),
+                    )
                     _progress(
                         f"[clean {len(cleaned)}/{total}] "
                         f"{_format_ts(batch[0].start)}-{_format_ts(batch[-1].end)} done, "

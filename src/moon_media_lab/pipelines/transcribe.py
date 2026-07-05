@@ -265,7 +265,20 @@ def _execute(
         update_state(job_dir, "transcribing", chunks_total=len(chunks), duration_sec=duration_sec)
         result = _run_chunked(engine, request, job_dir, chunks)
     else:
-        update_state(job_dir, "transcribing", duration_sec=duration_sec)
+        # Single-pass runs (diarization, short media) expose no exact
+        # progress; record an estimate from benchmarked realtime factors
+        # so frontends can show approximate percent.
+        estimate = None
+        if duration_sec:
+            factor = 0.30 if request.need_diarization else 0.12
+            estimate = round(duration_sec * factor)
+        update_state(
+            job_dir,
+            "transcribing",
+            duration_sec=duration_sec,
+            stage_started_at=int(time.time()),
+            estimated_runtime_sec=estimate,
+        )
         result = engine.transcribe(_chunk_request(engine_source, request))
 
     write_json(job_dir / "transcript.raw.json", result.to_dict())
@@ -281,7 +294,13 @@ def _execute(
         from moon_media_lab.llm.registry import get_llm_provider
         from moon_media_lab.postproc.runner import generate_mode_doc
 
-        update_state(job_dir, "postprocessing")
+        update_state(
+            job_dir,
+            "postprocessing",
+            percent=None,
+            eta_sec=None,
+            stage_started_at=int(time.time()),
+        )
         generate_mode_doc(result, request.mode, get_llm_provider(llm), job_dir)
     update_state(
         job_dir,
@@ -337,7 +356,13 @@ def run_transcription(
     append_log(job_dir, f"created job for {source} engine={resolved_engine}")
     write_json(job_dir / "input.json", asdict(request))
     update_state(
-        job_dir, "preparing", source=source, language=language, engine=resolved_engine, mode=mode
+        job_dir,
+        "preparing",
+        source=source,
+        language=language,
+        engine=resolved_engine,
+        mode=mode,
+        started_at=int(time.time()),
     )
     try:
         return _execute(request, job_dir, chunk_sec=chunk_sec, model_dir=model_dir, llm=llm)
@@ -373,7 +398,7 @@ def resume_transcription(
     if manifest_path.exists():
         chunk_sec = json.loads(manifest_path.read_text(encoding="utf-8"))["chunk_sec"]
     append_log(job_dir, "resuming job")
-    update_state(job_dir, "preparing", resumed=True)
+    update_state(job_dir, "preparing", resumed=True, started_at=int(time.time()))
     try:
         return _execute(request, job_dir, chunk_sec=chunk_sec, model_dir=model_dir, llm=llm)
     except Exception as exc:
