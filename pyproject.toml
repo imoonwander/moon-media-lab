@@ -1,6 +1,6 @@
 [project]
 name = "moon-media-lab"
-version = "0.1.5"
+version = "0.1.6"
 description = "Local-first media lab: audio/video/online media to transcripts, subtitles, knowledge notes, and voice."
 readme = "README.md"
 license = { file = "LICENSE" }

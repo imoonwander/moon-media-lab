@@ -10,18 +10,23 @@ The first public interface should be CLI-only.
 moon-media doctor
 ```
 
-Purpose:
+A health report — the first command a new user should run. It shows,
+with ✓/○/✗ status:
 
-- print project paths
-- check ffmpeg availability
-- check optional engine install status
-- avoid importing heavy ML packages unless explicitly requested
+- ffmpeg availability (required)
+- each capability's install state (ASR engines, URL ingestion, TTS, web)
+  with the exact `pip install` line to fix a missing one
+- which LLM CLIs (claude/codex/gemini) are on PATH for post-processing
+- downloaded models and their sizes
+- a verdict: whether you can transcribe now, or the next step to get there
+
+Never imports heavy ML packages (uses `find_spec` only).
 
 Optional:
 
 ```bash
-moon-media doctor --engine sensevoice
-moon-media doctor --engine faster-whisper
+moon-media doctor --json              # machine-readable (CI/scripts)
+moon-media doctor --engine sensevoice # check one engine's install state
 ```
 
 ### transcribe

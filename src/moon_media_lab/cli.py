@@ -26,7 +26,20 @@ ENGINE_PACKAGES = {
 }
 
 
-def command_doctor(args: argparse.Namespace) -> int:
+# Optional capabilities checked by doctor: label -> (import spec, extra, why).
+_OPTIONAL_DEPS = [
+    ("Chinese ASR (SenseVoice/Paraformer)", "funasr", "asr-sensevoice", "转写中文音视频"),
+    ("English ASR (faster-whisper)", "faster_whisper", "asr-whisper", "转写英文音视频"),
+    ("URL ingestion (yt-dlp)", "yt_dlp", "url", "直接转 YouTube/Bilibili/抖音 链接"),
+    ("Text-to-speech (edge-tts)", "edge_tts", "tts-edge", "文字转语音"),
+    ("Web UI (fastapi)", "fastapi", "web", "浏览器界面 moon-media serve"),
+]
+_LLM_CLIS = [("claude", "claude-cli"), ("codex", "codex-cli"), ("gemini", "gemini-cli")]
+
+
+def _doctor_payload(engine: str | None) -> dict:
+    import shutil
+
     from moon_media_lab.media.resolver import find_tool
 
     paths = get_paths()
@@ -41,19 +54,83 @@ def command_doctor(args: argparse.Namespace) -> int:
         "output": str(paths.output),
         "ffmpeg": find_tool("ffmpeg"),
         "ffprobe": find_tool("ffprobe"),
+        "engines": {
+            label: importlib.util.find_spec(spec) is not None
+            for label, spec, _extra, _why in _OPTIONAL_DEPS
+        },
+        "llm_clis": {name: shutil.which(name) is not None for name, _p in _LLM_CLIS},
     }
-    if args.engine:
-        package = ENGINE_PACKAGES.get(args.engine)
-        if args.engine not in ENGINE_PACKAGES:
-            payload["engine"] = {"name": args.engine, "known": False}
+    try:
+        from moon_media_lab import models_cli
+
+        payload["models"] = str(paths.models)
+        payload["downloaded_models"] = models_cli.list_models()
+    except Exception:  # noqa: BLE001 - model listing is best-effort
+        payload["downloaded_models"] = []
+    if engine:
+        package = ENGINE_PACKAGES.get(engine)
+        if engine not in ENGINE_PACKAGES:
+            payload["engine"] = {"name": engine, "known": False}
         else:
             installed = package is None or importlib.util.find_spec(package) is not None
-            payload["engine"] = {
-                "name": args.engine,
-                "installed": installed,
-                "package": package,
-            }
-    print(json.dumps(payload, ensure_ascii=False, indent=2))
+            payload["engine"] = {"name": engine, "installed": installed, "package": package}
+    return payload
+
+
+def command_doctor(args: argparse.Namespace) -> int:
+    payload = _doctor_payload(args.engine)
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 0
+
+    ok, warn, bad = "\033[32m✓\033[0m", "\033[33m○\033[0m", "\033[31m✗\033[0m"
+    print(f"\n  moon-media-lab {payload['version']}")
+    print(f"  home: {payload['home']}\n")
+
+    ffmpeg_ok = bool(payload["ffmpeg"])
+    ffmpeg_line = payload["ffmpeg"] or "NOT FOUND — brew install ffmpeg (必需)"
+    print("  System")
+    print(f"    {ok if ffmpeg_ok else bad} ffmpeg   {ffmpeg_line}")
+
+    print("\n  Capabilities")
+    for label, _spec, extra, why in _OPTIONAL_DEPS:
+        installed = payload["engines"][label]
+        mark = ok if installed else warn
+        tail = f"{why}" if installed else f"缺失 · pip install 'moon-media-lab[{extra}]' — {why}"
+        print(f"    {mark} {label}")
+        if not installed:
+            print(f"        └ {tail}")
+
+    print("\n  LLM CLI (用于知识笔记/清理，任选其一)")
+    any_llm = False
+    for name, _p in _LLM_CLIS:
+        present = payload["llm_clis"][name]
+        any_llm = any_llm or present
+        print(f"    {ok if present else warn} {name}")
+
+    models = payload.get("downloaded_models", [])
+    print(f"\n  Downloaded models ({len(models)})")
+    if models:
+        for name, size in models:
+            print(f"    {ok} {size:>8}  {name}")
+    else:
+        print("    ○ 暂无 · moon-media models download sensevoice")
+
+    # Verdict: can the user actually transcribe right now?
+    print("\n  ─────────────────────────────────────")
+    if not ffmpeg_ok:
+        print("  ✗ 还不能用：先安装 ffmpeg（brew install ffmpeg）")
+    elif not (payload["engines"]["Chinese ASR (SenseVoice/Paraformer)"]
+              or payload["engines"]["English ASR (faster-whisper)"]):
+        print("  ○ 差一步：装一个 ASR 引擎，例如")
+        print("      pip install 'moon-media-lab[asr-sensevoice]'")
+        print("      moon-media models download sensevoice")
+    else:
+        print("  ✓ 已就绪，可以开始：")
+        print("      moon-media transcribe your-file.m4a --language zh")
+        if not any_llm:
+            print("    （知识笔记需要 claude/codex/gemini 任一 CLI）")
+    print()
     return 0
 
 
@@ -193,8 +270,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"moon-media-lab {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    doctor = subparsers.add_parser("doctor", help="Print project paths and check tooling")
+    doctor = subparsers.add_parser("doctor", help="Health check: tooling, engines, models")
     doctor.add_argument("--engine", help="Check install status of one engine (no heavy import)")
+    doctor.add_argument("--json", action="store_true", help="Machine-readable output")
     doctor.set_defaults(func=command_doctor)
 
     transcribe = subparsers.add_parser("transcribe", help="Create a transcript job")

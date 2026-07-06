@@ -29,11 +29,20 @@ def test_unknown_engine_exit_code(lab_home):
     assert main(["transcribe", "x.wav", "--engine", "nosuch"]) == 2
 
 
-def test_doctor_reports_paths(lab_home, capsys):
-    assert main(["doctor"]) == 0
+def test_doctor_json_reports_paths(lab_home, capsys):
+    assert main(["doctor", "--json"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["home"] == str(lab_home)
     assert "ffmpeg" in payload
+    assert "engines" in payload
+    assert "llm_clis" in payload
+
+
+def test_doctor_human_readable(lab_home, capsys):
+    assert main(["doctor"]) == 0
+    out = capsys.readouterr().out
+    assert "moon-media-lab" in out
+    assert "Capabilities" in out
 
 
 def test_version_flag(capsys):

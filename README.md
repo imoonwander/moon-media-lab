@@ -58,8 +58,12 @@ Requires Python 3.9+ (3.10+ recommended) and [ffmpeg](https://ffmpeg.org).
 git clone <repo-url> && cd moon_media_lab
 python3 -m venv .venv
 .venv/bin/pip install -e '.[asr-sensevoice,asr-whisper,url,tts-edge]'
-.venv/bin/moon-media doctor
+.venv/bin/moon-media doctor   # health report: what's ready, what's next
 ```
+
+`moon-media doctor` prints a ✓/○/✗ checklist of ffmpeg, engines, LLM
+CLIs, and downloaded models, ending with whether you can transcribe now
+or the exact next step. Run it first.
 
 Pick only the extras you need — the base CLI has zero dependencies.
 

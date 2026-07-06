@@ -15,7 +15,9 @@ and works globally on your machine.**
 - [x] Long-media chunking, checkpoints, resume, progress
 - [x] LLM post-processing (knowledge / clean / speakers) via provider adapters
 - [x] Subtitles (srt/vtt), models management with mirror + resume
-- [ ] Global install story (pipx / uv tool), first-run experience polish
+- [x] First-run experience: `doctor` is now a ✓/○/✗ health report with a
+      verdict and next-step guidance (human-readable default, `--json` for CI)
+- [ ] Global install story (pipx / uv tool), packaging polish
 - [ ] CLI stability hardening: clearer errors, edge cases from daily use
 - [ ] Public release: flip the repo public, announce
 - Note: the built-in web UI (`moon-media serve`) ships in 0.1.x as a
