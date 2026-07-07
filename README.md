@@ -1,5 +1,7 @@
 # Moon Media Lab
 
+**English · [简体中文](README.zh-CN.md)**
+
 Local-first media lab: turn audio, video, and online media into
 transcripts, subtitles, knowledge notes, study material — and voice.
 
