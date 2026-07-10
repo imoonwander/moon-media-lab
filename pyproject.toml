@@ -21,11 +21,16 @@ asr-sensevoice = ["funasr", "modelscope", "torch", "torchaudio", "soundfile"]
 asr-whisper = ["faster-whisper"]
 url = ["yt-dlp"]
 tts-edge = ["edge-tts"]
+tts-qwen3-mlx = [
+    "mlx-audio>=0.4.5; platform_system == 'Darwin' and platform_machine == 'arm64'",
+    "soundfile>=0.13",
+]
 web = ["fastapi", "uvicorn", "python-multipart"]
-dev = ["pytest", "ruff", "httpx"]
+dev = ["pytest", "ruff", "httpx", "numpy", "soundfile"]
 
 [project.scripts]
 moon-media = "moon_media_lab.cli:main"
+moon-media-voice-case = "moon_media_lab.tts.video_case:main"
 
 [tool.setuptools.package-data]
 "moon_media_lab.web" = ["static/*.html"]

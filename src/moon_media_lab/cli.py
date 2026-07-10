@@ -32,6 +32,12 @@ _OPTIONAL_DEPS = [
     ("English ASR (faster-whisper)", "faster_whisper", "asr-whisper", "转写英文音视频"),
     ("URL ingestion (yt-dlp)", "yt_dlp", "url", "直接转 YouTube/Bilibili/抖音 链接"),
     ("Text-to-speech (edge-tts)", "edge_tts", "tts-edge", "文字转语音"),
+    (
+        "Voice design/clone (Qwen3-TTS MLX)",
+        "mlx_audio",
+        "tts-qwen3-mlx",
+        "Apple Silicon 本地音色设计与克隆",
+    ),
     ("Web UI (fastapi)", "fastapi", "web", "浏览器界面 moon-media serve"),
 ]
 _LLM_CLIS = [("claude", "claude-cli"), ("codex", "codex-cli"), ("gemini", "gemini-cli")]

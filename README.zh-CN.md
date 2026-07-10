@@ -111,6 +111,7 @@ MOON_MEDIA_LAB_COOKIES_BROWSER=chrome \
 | `process <job目录>` | 对完成的 job 做 LLM 后处理 |
 | `models list\|download\|prune` | 管理本地 ASR 模型 |
 | `tts <文本>` | 文字转语音（edge-tts） |
+| `moon-media-voice-case` | 本地设计并克隆 Qwen3 音色，产出视频时间轴 |
 | `serve` | 本地 Web 界面（beta） |
 
 ### transcribe
@@ -170,6 +171,29 @@ moon-media models prune                         # 清理中断的 .part/.incompl
 
 模型按文件下载，支持 HTTP-Range 断点续传——中断后重跑会接着下。
 一切落在项目的 `models/` 和 `cache/`；绝不写入 `~/.cache`。
+
+### 本地音色设计 + 视频旁白（Apple Silicon）
+
+可选的 Qwen3-TTS MLX 工作流会先用文字描述设计一段可复用的参考音色，
+再逐句克隆该音色。最终同时写出 WAV 和按真实采样数计算的逐句时间轴，
+视频渲染器可以用同一份产物驱动旁白、字幕和场景切换。
+
+```bash
+pip install -e '.[tts-qwen3-mlx]'
+
+moon-media-voice-case \
+  --text-file /path/to/narration.txt \
+  --profile /path/to/voice-profile.json \
+  --output-dir output/voice-case
+```
+
+首次运行会下载 profile 指定的 VoiceDesign 与 Base/clone 模型，模型文件遵循
+项目本地缓存设置。音色确定后可加 `--reuse-reference`，保留参考音色，只重做
+旁白。音频仍是本地实例产物；可复现的正本是 JSON 音色 profile。
+
+如果模型已通过 ModelScope 或 Hugging Face 下载到本地，可用
+`MOON_MEDIA_LAB_QWEN3_DESIGN_MODEL` 和 `MOON_MEDIA_LAB_QWEN3_CLONE_MODEL`
+覆盖 profile 中的远程模型 ID。
 
 ## 输入源
 

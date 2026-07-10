@@ -114,6 +114,7 @@ post-processing outputs. The job folder is the API — nothing else to learn.
 | `process <job-dir>` | Run LLM post-processing on a finished job |
 | `models list\|download\|prune` | Manage local ASR models |
 | `tts <text>` | Text to speech (edge-tts) |
+| `moon-media-voice-case` | Design + clone a local Qwen3 voice and emit video timings |
 | `serve` | Local web UI (beta) |
 
 ### transcribe
@@ -174,6 +175,32 @@ moon-media models prune                         # remove interrupted .part/.inco
 Models download file-by-file with HTTP-Range resume — interrupt and
 rerun, it continues. Everything lands under the project `models/` and
 `cache/`; nothing is written to `~/.cache`.
+
+### Local voice design + video narration (Apple Silicon)
+
+The optional Qwen3-TTS MLX workflow first designs a reusable reference
+voice, then clones it sentence by sentence. It writes a WAV plus exact
+sentence timings derived from the generated sample counts, so a video
+renderer can use the same artifact for narration, captions, and scene cuts.
+
+```bash
+pip install -e '.[tts-qwen3-mlx]'
+
+moon-media-voice-case \
+  --text-file /path/to/narration.txt \
+  --profile /path/to/voice-profile.json \
+  --output-dir output/voice-case
+```
+
+The first run downloads the profile's VoiceDesign and Base/clone models.
+All Hugging Face files follow the project-local cache settings. Use
+`--reuse-reference` to keep an accepted designed voice while regenerating
+the narration. Audio remains a local instance artifact; the JSON profile is
+the reproducible source of truth.
+
+For a pre-downloaded ModelScope/Hugging Face snapshot, override the two model
+IDs with `MOON_MEDIA_LAB_QWEN3_DESIGN_MODEL` and
+`MOON_MEDIA_LAB_QWEN3_CLONE_MODEL`.
 
 ## Sources
 

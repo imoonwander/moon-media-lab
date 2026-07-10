@@ -1,6 +1,7 @@
 .DS_Store
 .env
 .venv/
+/NEXT.md
 __pycache__/
 *.pyc
 *.egg-info/
