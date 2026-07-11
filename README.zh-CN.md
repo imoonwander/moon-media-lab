@@ -25,6 +25,8 @@
 就在用的命令行（`claude`、`codex`、`gemini`）；每份产物都会在
 `postproc/provenance.json` 里记录是哪个提供方处理的数据。
 
+> 想直接按任务操作：阅读 [核心功能与操作手册](docs/core-workflows.zh-CN.md)。
+
 ## 功能
 
 - **中文 ASR** —— SenseVoice（快）或 Paraformer + CAM++，配

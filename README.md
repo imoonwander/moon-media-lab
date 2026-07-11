@@ -26,6 +26,8 @@ is opt-in and goes through whichever CLI you already use (`claude`,
 `codex`, `gemini`); every output records which provider saw the data in
 `postproc/provenance.json`.
 
+> Chinese task-oriented guide: [核心功能与操作手册](docs/core-workflows.zh-CN.md).
+
 ## Features
 
 - **Chinese ASR** — SenseVoice (fast) or Paraformer + CAM++ with
