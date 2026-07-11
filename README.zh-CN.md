@@ -108,12 +108,15 @@ MOON_MEDIA_LAB_COOKIES_BROWSER=chrome \
 | 命令 | 用途 |
 |------|------|
 | `doctor` | 体检报告：ffmpeg、引擎、LLM 命令行、模型、裁决 |
+| `learn media\|voice` | 从媒体或音色来源学习并沉淀结果 |
+| `assets voices list\|show` | 查看版本化音色资产 |
+| `create narration` | 用音色资产生成旁白与逐句时间轴 |
 | `transcribe <源>` | 把文件/链接转成转录 job |
 | `resume <job目录>` | 续跑一个被中断的转录 job |
 | `process <job目录>` | 对完成的 job 做 LLM 后处理 |
 | `models list\|download\|prune` | 管理本地 ASR 模型 |
 | `tts <文本>` | 文字转语音（edge-tts） |
-| `moon-media-voice-case` | 本地设计并克隆 Qwen3 音色，产出视频时间轴 |
+| `moon-media-voice-case` | 底层兼容入口；新流程优先使用上面的生命周期命令 |
 | `serve` | 本地 Web 界面（beta） |
 
 ### transcribe
@@ -183,20 +186,23 @@ moon-media models prune                         # 清理中断的 .part/.incompl
 ```bash
 pip install -e '.[tts-qwen3-mlx]'
 
-moon-media-voice-case \
-  --text-file /path/to/narration.txt \
-  --profile /path/to/voice-profile.json \
-  --output-dir output/voice-case
+moon-media learn voice design \
+  --id moon-reader-v1 \
+  --description "温暖、清醒、克制的中文旁白" \
+  --reference-text "你好，愿每一次阅读都让你更靠近自己。"
+
+moon-media create narration /path/to/narration.txt \
+  --voice moon-reader-v1 \
+  --output-dir output/voice-runs/episode-001
 ```
 
-首次运行会下载 profile 指定的 VoiceDesign 与 Base/clone 模型，模型文件遵循
-项目本地缓存设置。音色确定后可加 `--reuse-reference`，保留参考音色，只重做
-旁白。音频仍是本地实例产物；可复现的正本是 JSON 音色 profile。
+本人声音或明确授权的参考音频使用 `moon-media learn voice clone`。
+`learn` 会把音色沉淀为 `assets/voices/` 下的版本化候选资产；`create` 直接按
+voice id 消费资产，不再要求用户传 profile/reference 的内部路径。
 
-通过试听确认的设计音色或授权克隆音色统一进入本地忽略的
-`assets/voices/<voice-id>/` 资产库。生成旁白时用 `--reference-audio` 直接读取
-音色正本，把 narration 和 timings 写入独立 run 目录。完整规范见
-[`docs/voice-assets-workflow.md`](docs/voice-assets-workflow.md)。
+通过试听确认的音色统一进入本地忽略的 `assets/voices/<voice-id>/` 资产库。
+完整规范见 [`docs/voice-assets-workflow.md`](docs/voice-assets-workflow.md)。
+`moon-media-voice-case` 只保留为底层兼容入口。
 
 如果模型已通过 ModelScope 或 Hugging Face 下载到本地，可用
 `MOON_MEDIA_LAB_QWEN3_DESIGN_MODEL` 和 `MOON_MEDIA_LAB_QWEN3_CLONE_MODEL`

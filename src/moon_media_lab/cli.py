@@ -4,6 +4,7 @@ import argparse
 import importlib.util
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from moon_media_lab import __version__
@@ -271,6 +272,111 @@ def command_tts(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_learn_voice(args: argparse.Namespace) -> int:
+    from moon_media_lab.assets.voices import design_voice_asset, import_voice_asset
+
+    if args.voice_learn_command == "clone":
+        transcript = args.transcript
+        if args.transcript_file:
+            transcript = Path(args.transcript_file).read_text(encoding="utf-8")
+        asset = import_voice_asset(
+            source=Path(args.source),
+            transcript=transcript,
+            voice_id=args.voice_id,
+            authorization_confirmed=args.authorization_confirmed,
+        )
+    elif args.voice_learn_command == "design":
+        asset = design_voice_asset(
+            voice_id=args.voice_id,
+            description=args.description,
+            reference_text=args.reference_text,
+        )
+    else:
+        raise InvalidArguments("Unknown learn voice command")
+    print(asset.directory)
+    return 0
+
+
+def command_voice_assets(args: argparse.Namespace) -> int:
+    from moon_media_lab.assets.voices import list_voice_assets, load_voice_asset
+
+    if args.voices_command == "list":
+        rows = list_voice_assets()
+        if args.json:
+            print(json.dumps(rows, ensure_ascii=False, indent=2))
+            return 0
+        if not rows:
+            print("no voice assets yet")
+            return 0
+        for manifest in rows:
+            print(
+                f"{manifest.get('id', 'unknown'):<28} "
+                f"{manifest.get('status', 'unknown'):<10} "
+                f"{manifest.get('sourceType', 'unknown')}"
+            )
+        return 0
+    if args.voices_command == "show":
+        asset = load_voice_asset(args.voice_id)
+        payload = dict(asset.manifest)
+        payload["directory"] = str(asset.directory)
+        payload["profile"] = str(asset.profile)
+        payload["reference"] = str(asset.reference)
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 0
+    raise InvalidArguments("Unknown voice assets command")
+
+
+def command_create_narration(args: argparse.Namespace) -> int:
+    from moon_media_lab.assets.voices import load_voice_asset
+    from moon_media_lab.tts.video_case import run_case
+
+    asset = load_voice_asset(args.voice)
+    output_dir = (
+        Path(args.output_dir)
+        if args.output_dir
+        else get_paths().output
+        / "voice-runs"
+        / f"narration-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+    )
+    result = run_case(
+        text_file=Path(args.text_file),
+        profile_file=asset.profile,
+        output_dir=output_dir,
+        reference_audio=asset.reference,
+    )
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _add_transcribe_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("source", help="Local file path, URL, or text for the mock engine")
+    parser.add_argument("--kind", choices=["file", "url", "text"], default="file")
+    parser.add_argument("--language", choices=["auto", "zh", "en", "mixed"], default="auto")
+    parser.add_argument("--engine", default="auto")
+    parser.add_argument(
+        "--mode",
+        choices=["transcript", "knowledge", "english-study", "skill"],
+        default="transcript",
+    )
+    parser.add_argument("--diarization", action="store_true")
+    parser.add_argument("--word-timestamps", action="store_true")
+    parser.add_argument("--job-dir", help="Override the jobs root directory")
+    parser.add_argument("--model-dir", help="Override the engine model path")
+    parser.add_argument(
+        "--chunk-sec",
+        type=int,
+        default=DEFAULT_CHUNK_SEC,
+        help="Chunk length in seconds for long media (default: %(default)s)",
+    )
+    parser.add_argument("--llm", default="auto", help="LLM provider for post-processing")
+    parser.add_argument(
+        "--playlist", action="store_true", help="Transcribe every entry of a playlist URL"
+    )
+    parser.add_argument(
+        "--playlist-items", help="Entry selection like 1-5 or 1,3,7 (yt-dlp syntax)"
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="moon-media", description="Moon Media Lab CLI")
     parser.add_argument("--version", action="version", version=f"moon-media-lab {__version__}")
@@ -281,34 +387,60 @@ def build_parser() -> argparse.ArgumentParser:
     doctor.add_argument("--json", action="store_true", help="Machine-readable output")
     doctor.set_defaults(func=command_doctor)
 
-    transcribe = subparsers.add_parser("transcribe", help="Create a transcript job")
-    transcribe.add_argument("source", help="Local file path, URL, or text for the mock engine")
-    transcribe.add_argument("--kind", choices=["file", "url", "text"], default="file")
-    transcribe.add_argument("--language", choices=["auto", "zh", "en", "mixed"], default="auto")
-    transcribe.add_argument("--engine", default="auto")
-    transcribe.add_argument(
-        "--mode",
-        choices=["transcript", "knowledge", "english-study", "skill"],
-        default="transcript",
-    )
-    transcribe.add_argument("--diarization", action="store_true")
-    transcribe.add_argument("--word-timestamps", action="store_true")
-    transcribe.add_argument("--job-dir", help="Override the jobs root directory")
-    transcribe.add_argument("--model-dir", help="Override the engine model path")
-    transcribe.add_argument(
-        "--chunk-sec",
-        type=int,
-        default=DEFAULT_CHUNK_SEC,
-        help="Chunk length in seconds for long media (default: %(default)s)",
-    )
-    transcribe.add_argument("--llm", default="auto", help="LLM provider for post-processing")
-    transcribe.add_argument(
-        "--playlist", action="store_true", help="Transcribe every entry of a playlist URL"
-    )
-    transcribe.add_argument(
-        "--playlist-items", help="Entry selection like 1-5 or 1,3,7 (yt-dlp syntax)"
-    )
+    transcribe = subparsers.add_parser("transcribe", help="Create a transcript job (low-level)")
+    _add_transcribe_arguments(transcribe)
     transcribe.set_defaults(func=command_transcribe)
+
+    learn = subparsers.add_parser("learn", help="Turn media or voices into reusable knowledge assets")
+    learn_sub = learn.add_subparsers(dest="learn_command", required=True)
+    learn_media = learn_sub.add_parser(
+        "media", help="Ingest media and learn its transcript/knowledge"
+    )
+    _add_transcribe_arguments(learn_media)
+    learn_media.set_defaults(func=command_transcribe)
+    learn_voice = learn_sub.add_parser("voice", help="Learn a reusable voice asset")
+    learn_voice_sub = learn_voice.add_subparsers(dest="voice_learn_command", required=True)
+    learn_voice_clone = learn_voice_sub.add_parser(
+        "clone", help="Learn from an explicitly authorized voice reference"
+    )
+    learn_voice_clone.add_argument("source", help="Local audio or video reference")
+    learn_voice_clone.add_argument("--id", dest="voice_id", required=True)
+    transcript_group = learn_voice_clone.add_mutually_exclusive_group(required=True)
+    transcript_group.add_argument("--transcript", help="Exact reference transcript")
+    transcript_group.add_argument("--transcript-file", help="UTF-8 file with exact transcript")
+    learn_voice_clone.add_argument(
+        "--authorization-confirmed",
+        action="store_true",
+        help="Confirm this is your voice or you have explicit permission",
+    )
+    learn_voice_clone.set_defaults(func=command_learn_voice)
+    learn_voice_design = learn_voice_sub.add_parser(
+        "design", help="Create a synthetic voice asset from a description"
+    )
+    learn_voice_design.add_argument("--id", dest="voice_id", required=True)
+    learn_voice_design.add_argument("--description", required=True)
+    learn_voice_design.add_argument("--reference-text", required=True)
+    learn_voice_design.set_defaults(func=command_learn_voice)
+
+    assets = subparsers.add_parser("assets", help="Inspect reusable learned assets")
+    assets_sub = assets.add_subparsers(dest="assets_type", required=True)
+    voices = assets_sub.add_parser("voices", help="Manage the local voice asset library")
+    voices_sub = voices.add_subparsers(dest="voices_command", required=True)
+    voices_list = voices_sub.add_parser("list", help="List voice assets")
+    voices_list.add_argument("--json", action="store_true")
+    voices_show = voices_sub.add_parser("show", help="Show one voice asset")
+    voices_show.add_argument("voice_id")
+    voices.set_defaults(func=command_voice_assets)
+
+    create = subparsers.add_parser("create", help="Create new media artifacts from assets")
+    create_sub = create.add_subparsers(dest="create_command", required=True)
+    create_narration = create_sub.add_parser(
+        "narration", help="Create narration and timings from an approved voice asset"
+    )
+    create_narration.add_argument("text_file", help="UTF-8 narration text file")
+    create_narration.add_argument("--voice", required=True, help="Versioned voice asset id")
+    create_narration.add_argument("--output-dir")
+    create_narration.set_defaults(func=command_create_narration)
 
     resume = subparsers.add_parser("resume", help="Continue an interrupted transcribe job")
     resume.add_argument("job_dir", help="Path to the jobs/transcribe-... folder")

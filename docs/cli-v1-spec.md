@@ -2,7 +2,58 @@
 
 The first public interface should be CLI-only.
 
-## Commands
+## Command Model
+
+The primary user-facing lifecycle is:
+
+```text
+moon-media learn ...
+moon-media assets ...
+moon-media create ...
+```
+
+Low-level commands (`transcribe`, `process`, `tts`, `models`) remain stable for scripts and
+advanced use. The standalone `moon-media-voice-case` entry point is a compatibility tool; new
+workflows should use `moon-media learn voice` and `moon-media create narration`.
+
+### learn
+
+```bash
+moon-media learn media <source> --language zh --mode knowledge
+
+moon-media learn voice design \
+  --id moon-reader-v1 \
+  --description "warm, calm Chinese narrator" \
+  --reference-text "你好，愿每一次阅读都让你更靠近自己。"
+
+moon-media learn voice clone reference.mp4 \
+  --id authorized-reader-v1 \
+  --transcript "准确逐字稿" \
+  --authorization-confirmed
+```
+
+`learn media` uses the transcribe pipeline. `learn voice` creates a candidate asset under
+`assets/voices/<voice-id>/`; it never silently overwrites an existing version.
+
+### assets
+
+```bash
+moon-media assets voices list
+moon-media assets voices list --json
+moon-media assets voices show <voice-id>
+```
+
+### create
+
+```bash
+moon-media create narration narration.txt \
+  --voice moon-reader-v1 \
+  --output-dir output/voice-runs/episode-001
+```
+
+Future extensions may add `create video` and `remix`, but those should call downstream adapters.
+
+## Compatibility Commands
 
 ### doctor
 

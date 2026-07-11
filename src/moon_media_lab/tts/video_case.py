@@ -5,6 +5,7 @@ import gc
 import json
 import os
 import re
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -283,6 +284,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    print(
+        "warning: moon-media-voice-case is a compatibility entry; prefer "
+        "'moon-media learn voice' and 'moon-media create narration'.",
+        file=sys.stderr,
+    )
     args = build_parser().parse_args(argv)
     result = run_case(
         text_file=args.text_file,

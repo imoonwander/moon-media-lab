@@ -1,6 +1,28 @@
 # Architecture
 
-## High-level Flow
+## Product Lifecycle
+
+```text
+Learn
+  media -> transcript / subtitles / notes
+  voice -> designed or authorized cloned reference
+    |
+    v
+Assets
+  jobs / knowledge artifacts / voice registry
+    |
+    v
+Create
+  narration / timings / export bundle
+    |
+    v
+Remix / Export
+  downstream adapters such as moon-video-cast
+```
+
+Low-level engines remain replaceable implementation details under this lifecycle.
+
+## Media Learning Flow
 
 ```text
 Input
@@ -37,15 +59,27 @@ Post Processors
   skill-draft.md
     |
     v
-Optional TTS
-  text to speech artifacts
+Asset Registry / Creation
+  approved voices -> narration + timings + manifest
 ```
 
 ## Layer Responsibilities
 
 ### CLI
 
-Accept user commands and create requests. It should not know model-specific details.
+Expose lifecycle commands (`learn`, `assets`, `create`) and compatibility expert commands
+(`transcribe`, `process`, `tts`, `models`). It should not know model-specific details.
+
+### Asset Registry
+
+Own reusable, versioned assets separately from one-off job output. Voice assets contain a
+manifest, profile, reference, and approved samples. Private asset contents stay ignored by Git.
+
+### Creation Adapters
+
+Consume approved assets and produce derivative artifacts. Core currently creates narration and
+sentence timings. Future video creation should delegate to a downstream adapter rather than
+embedding a video renderer in the media engine layer.
 
 ### Media Resolver
 

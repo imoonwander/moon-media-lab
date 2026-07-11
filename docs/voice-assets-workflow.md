@@ -96,11 +96,9 @@ ffmpeg -y -i reference.mp4 \
 先用与参考台词不同的 15-35 字文本生成试听：
 
 ```bash
-moon-media-voice-case \
-  --text-file assets/voices/<voice-id>/sample.txt \
-  --profile assets/voices/<voice-id>/profile.json \
-  --output-dir output/voice-runs/<voice-id>-sample \
-  --reference-audio assets/voices/<voice-id>/reference.wav
+moon-media create narration assets/voices/<voice-id>/sample.txt \
+  --voice <voice-id> \
+  --output-dir output/voice-runs/<voice-id>-sample
 ```
 
 检查音色年龄感、声线、语速、停顿、句尾、可懂度，以及是否复制了背景音乐或混响。未通过时优先更换更干净的参考录音。
@@ -116,11 +114,9 @@ moon-media-voice-case \
 使用已批准的音色资产生成任意项目旁白：
 
 ```bash
-moon-media-voice-case \
-  --text-file path/to/narration.txt \
-  --profile assets/voices/<voice-id>/profile.json \
-  --output-dir output/voice-runs/<run-id> \
-  --reference-audio assets/voices/<voice-id>/reference.wav
+moon-media create narration path/to/narration.txt \
+  --voice <voice-id> \
+  --output-dir output/voice-runs/<run-id>
 ```
 
 输出至少包含：
@@ -169,13 +165,13 @@ ffmpeg -hide_banner \
 
 ## 9. 未来 Skill 边界
 
-未来独立 Skill 可以提供类似入口：
+未来独立 Skill 可以用自然语言收集参数，再编排已经统一的 lifecycle 命令：
 
 ```text
-/voice-design <description>
-/voice-clone <reference-media> <reference-transcript>
-/voice-render <voice-id> <narration-file>
-/voice-list
+moon-media learn voice design ...
+moon-media learn voice clone ...
+moon-media assets voices list|show
+moon-media create narration ...
 ```
 
 Skill 只做参数收集、授权确认、命令编排、试听和资产登记；底层实现仍调用 `moon-media-lab`，音色资产仍存放在本项目的 `assets/voices/`。

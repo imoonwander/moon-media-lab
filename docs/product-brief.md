@@ -6,7 +6,7 @@
 
 ## One-line Positioning
 
-A local-first, open-source media lab that turns audio, video, and online media into transcripts, knowledge, learning material, reusable workflows, and voice output.
+A local-first, open-source media learning and creation system: ingest sources, learn from them, retain reusable assets, and create derivative media outputs.
 
 ## Why This Exists
 
@@ -30,7 +30,11 @@ The user does not only want raw transcription. The useful output is:
 
 ## Product Boundaries
 
-`moon_media_lab` is not just an ASR wrapper.
+`moon_media_lab` is not just an ASR wrapper. Its product lifecycle is:
+
+```text
+learn -> assets -> create/remix -> export
+```
 
 It should own:
 
@@ -39,6 +43,8 @@ It should own:
 - transcript normalization
 - post-processing hooks
 - TTS routing
+- reusable voice and media asset registries
+- creation/export adapters for downstream projects
 - job storage
 - export formats
 
@@ -47,7 +53,8 @@ It should not own:
 - permanent knowledge base UI in v1
 - full desktop GUI in v1
 - cloud account management in v1
-- model training in v1
+- model fine-tuning/training in v1 (zero-shot voice conditioning is supported)
+- final video rendering in core (delegate through a future adapter)
 
 ## Users
 

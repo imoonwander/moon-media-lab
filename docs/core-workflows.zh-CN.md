@@ -9,13 +9,14 @@
 | 能力 | 输入 | 命令 | 主要输出 |
 | --- | --- | --- | --- |
 | 环境体检 | 本机环境 | `moon-media doctor` | 引擎、模型、ffmpeg、LLM CLI 状态 |
-| 本地转写 | 音频/视频 | `moon-media transcribe` | Markdown、JSON、SRT、VTT |
-| 在线媒体 | URL/播放列表 | `moon-media transcribe <URL>` | 下载媒体 + 独立 job |
+| 学习媒体 | 音频/视频/URL | `moon-media learn media` | 转录、字幕、知识文档、job |
+| 学习音色 | 描述或授权参考音 | `moon-media learn voice` | 版本化候选音色资产 |
+| 查看资产 | 本地资产库 | `moon-media assets` | 资产列表、状态与 manifest |
+| 创作旁白 | 文本 + 音色资产 | `moon-media create narration` | narration、timings、metrics |
 | 断点恢复 | 中断 job | `moon-media resume` | 从 chunk checkpoint 继续 |
 | LLM 后处理 | 完成的 job | `moon-media process` | 知识笔记、清理稿、学习材料、SOP |
 | 模型管理 | 模型名称 | `moon-media models` | 项目本地模型与缓存 |
 | 普通 TTS | 文本 | `moon-media tts` | Edge TTS 音频 |
-| 音色设计/克隆 | 描述或授权参考音 | `moon-media-voice-case` | reference、narration、timings、metrics |
 | 音色资产库 | 已验收音色 | `assets/voices/` | profile、manifest、reference、samples |
 | Web UI | 文件、URL、job | `moon-media serve` | 本地网页（beta） |
 
@@ -73,27 +74,27 @@ python3 -m venv .venv
 中文：
 
 ```bash
-.venv/bin/moon-media transcribe interview.m4a --language zh
+.venv/bin/moon-media learn media interview.m4a --language zh
 ```
 
 中文访谈 + 说话人标签：
 
 ```bash
-.venv/bin/moon-media transcribe interview.m4a \
+.venv/bin/moon-media learn media interview.m4a \
   --language zh --diarization
 ```
 
 英文逐词时间戳：
 
 ```bash
-.venv/bin/moon-media transcribe podcast.mp3 \
+.venv/bin/moon-media learn media podcast.mp3 \
   --language en --word-timestamps
 ```
 
 中英混合：
 
 ```bash
-.venv/bin/moon-media transcribe meeting.mp4 --language mixed
+.venv/bin/moon-media learn media meeting.mp4 --language mixed
 ```
 
 自动路由：`zh → SenseVoice`；中文加 `--diarization → Paraformer + CAM++`；`en/mixed → faster-whisper`。一般不要强制引擎，排查时才加 `--engine`。
@@ -103,26 +104,26 @@ python3 -m venv .venv
 直链：
 
 ```bash
-.venv/bin/moon-media transcribe "https://example.com/audio.mp3" --language zh
+.venv/bin/moon-media learn media "https://example.com/audio.mp3" --language zh
 ```
 
 YouTube / Bilibili：
 
 ```bash
 MOON_MEDIA_LAB_COOKIES_BROWSER=chrome \
-  .venv/bin/moon-media transcribe "<URL>" --language zh
+  .venv/bin/moon-media learn media "<URL>" --language zh
 ```
 
 抖音：
 
 ```bash
-.venv/bin/moon-media transcribe "https://v.douyin.com/..." --language zh
+.venv/bin/moon-media learn media "https://v.douyin.com/..." --language zh
 ```
 
 播放列表：
 
 ```bash
-.venv/bin/moon-media transcribe "<playlist-url>" \
+.venv/bin/moon-media learn media "<playlist-url>" \
   --language zh --playlist --playlist-items 1-5
 ```
 
@@ -150,7 +151,7 @@ jobs/transcribe-YYYYMMDD-HHMMSS/
 长音频切块：
 
 ```bash
-.venv/bin/moon-media transcribe long.mp3 --language zh --chunk-sec 600
+.venv/bin/moon-media learn media long.mp3 --language zh --chunk-sec 600
 ```
 
 中断后继续：
@@ -202,10 +203,12 @@ jobs/transcribe-YYYYMMDD-HHMMSS/
 
 ## 8. 音色设计、克隆与资产
 
-当前推荐 Apple Silicon：
+当前推荐 Apple Silicon。主入口统一在 `moon-media` 下：
 
 ```bash
-.venv/bin/moon-media-voice-case --help
+.venv/bin/moon-media learn voice --help
+.venv/bin/moon-media assets voices list
+.venv/bin/moon-media create narration --help
 ```
 
 音色正本：
@@ -218,22 +221,36 @@ assets/voices/<voice-id>/
   samples/
 ```
 
-用文字描述创造音色：
+用文字描述学习并沉淀一个合成音色：
 
 ```bash
-.venv/bin/moon-media-voice-case \
-  --text-file path/to/narration.txt \
-  --profile path/to/design-profile.json \
-  --output-dir output/voice-runs/design-test
+.venv/bin/moon-media learn voice design \
+  --id moon-reader-v1 \
+  --description "温暖、清醒、克制的中文旁白" \
+  --reference-text "你好，愿每一次阅读都让你更靠近自己。"
 ```
 
-用已授权、已入库的 reference 克隆：
+从本人或明确授权的参考音频学习音色：
 
 ```bash
-.venv/bin/moon-media-voice-case \
-  --text-file path/to/narration.txt \
-  --profile assets/voices/<voice-id>/profile.json \
-  --reference-audio assets/voices/<voice-id>/reference.wav \
+.venv/bin/moon-media learn voice clone reference.mp4 \
+  --id authorized-reader-v1 \
+  --transcript "参考音频的准确逐字稿" \
+  --authorization-confirmed
+```
+
+查看已经沉淀的音色：
+
+```bash
+.venv/bin/moon-media assets voices list
+.venv/bin/moon-media assets voices show authorized-reader-v1
+```
+
+使用音色资产创作旁白：
+
+```bash
+.venv/bin/moon-media create narration path/to/narration.txt \
+  --voice authorized-reader-v1 \
   --output-dir output/voice-runs/<run-id>
 ```
 
@@ -245,7 +262,9 @@ assets/voices/<voice-id>/
 <voice-id>.run.json
 ```
 
-先做不同文案的短句 A/B，人工确认后再生成完整内容。音色克隆是 zero-shot conditioning，不是训练或微调。
+先用 `create narration` 做不同文案的短句 A/B，人工确认后再生成完整内容。音色克隆是 zero-shot conditioning，不是训练或微调。
+
+`moon-media-voice-case` 暂时保留为底层兼容入口；新操作不再以它作为主命令。
 
 详细规则：
 
@@ -305,9 +324,11 @@ assets/voices/<voice-id>/
 
 快速选择：
 
-- 音视频变文字 → `transcribe`
+- 音视频/URL 学习 → `learn media`
+- 描述或参考音频学习音色 → `learn voice design|clone`
+- 查看沉淀资产 → `assets voices list|show`
+- 用资产生成旁白 → `create narration`
 - 中断后继续 → `resume`
 - 转录变知识笔记 → `process`
 - 快速普通旁白 → `tts`
-- 创造或克隆长期音色 → `moon-media-voice-case` + `assets/voices/`
 - 最终视频渲染 → 不在本项目；把 narration/timings 交给视频项目

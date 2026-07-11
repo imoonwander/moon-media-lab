@@ -111,12 +111,15 @@ post-processing outputs. The job folder is the API — nothing else to learn.
 | Command | Purpose |
 |---------|---------|
 | `doctor` | Health report: ffmpeg, engines, LLM CLIs, models, verdict |
+| `learn media\|voice` | Learn from media or a voice source and retain the result |
+| `assets voices list\|show` | Inspect versioned voice assets |
+| `create narration` | Create narration and sentence timings from a voice asset |
 | `transcribe <source>` | Turn a file/URL into a transcript job |
 | `resume <job-dir>` | Continue an interrupted transcribe job |
 | `process <job-dir>` | Run LLM post-processing on a finished job |
 | `models list\|download\|prune` | Manage local ASR models |
 | `tts <text>` | Text to speech (edge-tts) |
-| `moon-media-voice-case` | Design + clone a local Qwen3 voice and emit video timings |
+| `moon-media-voice-case` | Low-level compatibility entry; prefer lifecycle commands above |
 | `serve` | Local web UI (beta) |
 
 ### transcribe
@@ -188,22 +191,23 @@ renderer can use the same artifact for narration, captions, and scene cuts.
 ```bash
 pip install -e '.[tts-qwen3-mlx]'
 
-moon-media-voice-case \
-  --text-file /path/to/narration.txt \
-  --profile /path/to/voice-profile.json \
-  --output-dir output/voice-case
+moon-media learn voice design \
+  --id moon-reader-v1 \
+  --description "warm, calm Chinese narrator" \
+  --reference-text "Hello. May every reading bring you closer to yourself."
+
+moon-media create narration /path/to/narration.txt \
+  --voice moon-reader-v1 \
+  --output-dir output/voice-runs/episode-001
 ```
 
-The first run downloads the profile's VoiceDesign and Base/clone models.
-All Hugging Face files follow the project-local cache settings. Use
-`--reuse-reference` to keep an accepted designed voice while regenerating
-the narration. Audio remains a local instance artifact; the JSON profile is
-the reproducible source of truth.
+Use `moon-media learn voice clone` for your own or explicitly authorized
+reference audio. `learn` retains a versioned candidate under `assets/voices/`;
+`create` consumes that asset without exposing profile/reference paths.
 
-Approved designed or authorized cloned voices belong in the local ignored
-`assets/voices/<voice-id>/` library. Use `--reference-audio` to render from
-that canonical asset while writing narration and timings to a separate run
-directory. See [`docs/voice-assets-workflow.md`](docs/voice-assets-workflow.md).
+Approved voices remain in the local ignored `assets/voices/<voice-id>/`
+library. See [`docs/voice-assets-workflow.md`](docs/voice-assets-workflow.md).
+`moon-media-voice-case` remains a low-level compatibility entry.
 
 For a pre-downloaded ModelScope/Hugging Face snapshot, override the two model
 IDs with `MOON_MEDIA_LAB_QWEN3_DESIGN_MODEL` and
