@@ -198,6 +198,11 @@ All Hugging Face files follow the project-local cache settings. Use
 the narration. Audio remains a local instance artifact; the JSON profile is
 the reproducible source of truth.
 
+Approved designed or authorized cloned voices belong in the local ignored
+`assets/voices/<voice-id>/` library. Use `--reference-audio` to render from
+that canonical asset while writing narration and timings to a separate run
+directory. See [`docs/voice-assets-workflow.md`](docs/voice-assets-workflow.md).
+
 For a pre-downloaded ModelScope/Hugging Face snapshot, override the two model
 IDs with `MOON_MEDIA_LAB_QWEN3_DESIGN_MODEL` and
 `MOON_MEDIA_LAB_QWEN3_CLONE_MODEL`.

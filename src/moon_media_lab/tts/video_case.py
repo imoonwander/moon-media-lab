@@ -137,10 +137,13 @@ def run_case(
     text_file: Path,
     profile_file: Path,
     output_dir: Path,
+    reference_audio: Path | None = None,
     reuse_reference: bool = False,
     reference_only: bool = False,
 ) -> dict[str, Any]:
     redirect_model_caches()
+    if reference_audio is not None and not reference_audio.is_file():
+        raise FileNotFoundError(f"Reference audio not found: {reference_audio}")
     try:
         import mlx.core as mx
         import soundfile as sf
@@ -158,14 +161,15 @@ def run_case(
         raise ValueError(f"No narration sentences found in {text_file}")
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    reference_path = output_dir / f"{profile.profile_id}.reference.wav"
+    generated_reference_path = output_dir / f"{profile.profile_id}.reference.wav"
+    reference_path = reference_audio or generated_reference_path
     narration_path = output_dir / f"{profile.profile_id}.narration.wav"
     timings_path = output_dir / f"{profile.profile_id}.timings.json"
     run_path = output_dir / f"{profile.profile_id}.run.json"
     started_at = time.time()
     run_metrics: dict[str, Any] = {"reference": [], "sentences": []}
 
-    if not reuse_reference or not reference_path.exists():
+    if reference_audio is None and (not reuse_reference or not reference_path.exists()):
         mx.random.seed(profile.seed)
         design_model = load_model(profile.design_model)
         reference_audio, reference_rate, metrics = _generated_audio(
@@ -268,6 +272,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--text-file", required=True, type=Path)
     parser.add_argument("--profile", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument(
+        "--reference-audio",
+        type=Path,
+        help="Use an existing approved voice asset instead of designing one in the output directory.",
+    )
     parser.add_argument("--reuse-reference", action="store_true")
     parser.add_argument("--reference-only", action="store_true")
     return parser
@@ -279,6 +288,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         text_file=args.text_file,
         profile_file=args.profile,
         output_dir=args.output_dir,
+        reference_audio=args.reference_audio,
         reuse_reference=args.reuse_reference,
         reference_only=args.reference_only,
     )

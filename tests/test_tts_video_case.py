@@ -4,7 +4,9 @@ import numpy as np
 
 import json
 
-from moon_media_lab.tts.video_case import VoiceProfile, assemble_segments, split_sentences
+import pytest
+
+from moon_media_lab.tts.video_case import VoiceProfile, assemble_segments, run_case, split_sentences
 
 
 def test_split_sentences_handles_chinese_paragraphs():
@@ -53,3 +55,27 @@ def test_voice_profile_allows_local_model_overrides(tmp_path, monkeypatch):
 
     assert profile.design_model == "/models/design"
     assert profile.clone_model == "/models/clone"
+
+
+def test_run_case_rejects_missing_explicit_reference_before_model_load(tmp_path):
+    text_file = tmp_path / "narration.txt"
+    profile_file = tmp_path / "profile.json"
+    text_file.write_text("测试。", encoding="utf-8")
+    profile_file.write_text(
+        json.dumps(
+            {
+                "id": "reader",
+                "description": "calm",
+                "referenceText": "你好。",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(FileNotFoundError, match="Reference audio not found"):
+        run_case(
+            text_file=text_file,
+            profile_file=profile_file,
+            output_dir=tmp_path / "output",
+            reference_audio=tmp_path / "missing.wav",
+        )

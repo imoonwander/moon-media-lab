@@ -191,6 +191,11 @@ moon-media-voice-case \
 项目本地缓存设置。音色确定后可加 `--reuse-reference`，保留参考音色，只重做
 旁白。音频仍是本地实例产物；可复现的正本是 JSON 音色 profile。
 
+通过试听确认的设计音色或授权克隆音色统一进入本地忽略的
+`assets/voices/<voice-id>/` 资产库。生成旁白时用 `--reference-audio` 直接读取
+音色正本，把 narration 和 timings 写入独立 run 目录。完整规范见
+[`docs/voice-assets-workflow.md`](docs/voice-assets-workflow.md)。
+
 如果模型已通过 ModelScope 或 Hugging Face 下载到本地，可用
 `MOON_MEDIA_LAB_QWEN3_DESIGN_MODEL` 和 `MOON_MEDIA_LAB_QWEN3_CLONE_MODEL`
 覆盖 profile 中的远程模型 ID。
