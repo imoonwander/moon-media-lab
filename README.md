@@ -31,6 +31,8 @@ is opt-in and goes through whichever CLI you already use (`claude`,
 `postproc/provenance.json`.
 
 > Chinese task-oriented guide: [核心功能与操作手册](docs/core-workflows.zh-CN.md).
+> For dated evidence and failure conditions, see
+> [Platform support and verification](docs/platform-support.md).
 
 ## Features
 
@@ -40,9 +42,9 @@ is opt-in and goes through whichever CLI you already use (`claude`,
   timestamps and confidence
 - **Speaker naming** — `process --name-speakers` turns `SPEAKER_00`
   into inferred names/roles and re-renders transcript + subtitles
-- **Online media** — `transcribe <url>` downloads via yt-dlp
-  (YouTube/Bilibili need browser cookies); Douyin uses a built-in
-  cookie-free direct downloader
+- **Online media** — `process <url>` routes acquisition by platform;
+  YouTube uses yt-dlp plus a JS runtime, Bilibili commonly needs cookies,
+  and public Douyin shares use the built-in downloader
 - **Long media** — silence-aligned chunking, per-chunk checkpoints,
   `resume <job-dir>`, progress/ETA, `transcript.partial.md` while running
 - **Playlists** — `--playlist [--playlist-items 1-5]`, one job per entry
@@ -250,20 +252,24 @@ For a pre-downloaded ModelScope/Hugging Face snapshot, override the two model
 IDs with `MOON_MEDIA_LAB_QWEN3_DESIGN_MODEL` and
 `MOON_MEDIA_LAB_QWEN3_CLONE_MODEL`.
 
-## Sources
+## Verified sources
 
-| Source | Command | Notes |
-|--------|---------|-------|
-| Local file | `transcribe audio.m4a` | mp3/m4a/wav/mp4/mov… anything ffmpeg reads |
-| Direct URL | `transcribe https://…/a.mp3` | no config needed |
-| YouTube | `MOON_MEDIA_LAB_COOKIES_BROWSER=chrome transcribe "https://youtu.be/…"` | needs browser cookies + a JS runtime (node) for the n-challenge; both auto-detected |
-| Bilibili | `MOON_MEDIA_LAB_COOKIES_BROWSER=chrome transcribe "https://www.bilibili.com/video/BV…"` | cookies required; transient 412 auto-retried |
-| Douyin | `transcribe "https://v.douyin.com/…"` | **no cookies** — built-in direct CDN downloader |
-| Playlist | `transcribe "<url>" --playlist --playlist-items 1-10` | one job per entry, failures skip forward |
+| Source | Status | Primary entry | Current evidence |
+|--------|--------|---------------|------------------|
+| <img src="docs/assets/platforms/local-file.svg" width="22" alt="Local file"> Local file | ✅ End to end | `process video.mp4 --preset knowledge` | Audio/video readable by ffmpeg |
+| <img src="docs/assets/platforms/direct-url.svg" width="22" alt="Direct URL"> HTTP(S) media URL | ✅ Download | `download "https://…/a.mp3"` | Public direct media URL |
+| <img src="docs/assets/platforms/youtube.svg" width="22" alt="YouTube"> YouTube | 🧪 Stream probe | `process "https://youtu.be/…" --preset english` | Node runtime; restricted videos may need cookies |
+| <img src="docs/assets/platforms/bilibili.svg" width="22" alt="Bilibili"> Bilibili | 🟡 Conditional | `process "https://www.bilibili.com/video/BV…" --preset knowledge` | Historical E2E success; current no-cookie probe returned 412 |
+| <img src="docs/assets/platforms/douyin.svg" width="22" alt="Douyin"> Douyin | ✅ End to end | `process "https://v.douyin.com/…" --preset knowledge` | Public share download and transcription verified |
 
-Online media downloads to `downloads/` first (via `yt-dlp`; a standalone
-`yt-dlp` binary on PATH is preferred over the pip copy). For bot-checked
-sites set `MOON_MEDIA_LAB_COOKIES_BROWSER` (chrome/firefox/edge/…) or
+Statuses are not permanent promises. See the dated commands, first failure gates,
+and icon attribution in [Platform support and verification](docs/platform-support.md).
+Playlists currently use the compatibility entry:
+`transcribe "<url>" --playlist --playlist-items 1-10`.
+
+Online media downloads to `downloads/` first (usually via `yt-dlp`; Douyin has
+a dedicated downloader). For bot-checked sites, knowingly set
+`MOON_MEDIA_LAB_COOKIES_BROWSER` (chrome/firefox/edge/…) or
 `MOON_MEDIA_LAB_COOKIES_FILE`.
 
 ## The job folder
@@ -347,6 +353,7 @@ own branch and land as a new series. See [Roadmap](docs/roadmap.md).
 
 ## Documentation
 
+- [Platform support and verification](docs/platform-support.md)
 - [CLI reference](docs/cli-v1-spec.md)
 - [Architecture](docs/architecture.md)
 - [Engine adapter spec](docs/engine-adapter-spec.md) — add your own engine
@@ -359,6 +366,7 @@ own branch and land as a new series. See [Roadmap](docs/roadmap.md).
 - [FunASR](https://github.com/modelscope/FunASR) — SenseVoice, Paraformer, CAM++
 - [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp)
+- Platform identification icons from [Simple Icons](https://simpleicons.org/) (CC0-1.0)
 - Douyin direct-download technique from
   [vangie/douyin-transcriber](https://github.com/vangie/douyin-transcriber) (MIT)
 

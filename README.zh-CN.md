@@ -29,6 +29,8 @@
 `postproc/provenance.json` 里记录是哪个提供方处理的数据。
 
 > 想直接按任务操作：阅读 [核心功能与操作手册](docs/core-workflows.zh-CN.md)。
+> 输入平台是否真的可用，以带日期和失败条件的
+> [平台支持与验证记录](docs/platform-support.md) 为准。
 
 ## 功能
 
@@ -37,8 +39,8 @@
 - **英文 ASR** —— faster-whisper `large-v3-turbo`，逐段时间戳与置信度
 - **说话人命名** —— `process --name-speakers` 把 `SPEAKER_00` 换成
   推断出的真名/角色，并重渲染转录稿和字幕
-- **在线媒体** —— `transcribe <链接>` 用 yt-dlp 下载
-  （YouTube/Bilibili 需浏览器 cookies）；抖音用内置的免 cookies 直连下载
+- **在线媒体** —— `process <链接>` 按平台路由下载；YouTube 依赖 yt-dlp 与
+  JS runtime，Bilibili 通常需要 Cookie，抖音使用内置公开短链下载器
 - **长音频** —— 静音对齐切块、逐块 checkpoint、`resume <job目录>`
   断点续传、进度/ETA、运行中的 `transcript.partial.md`
 - **播放列表** —— `--playlist [--playlist-items 1-5]`，一集一个 job
@@ -269,19 +271,22 @@ moon-media assets voices preview
 `MOON_MEDIA_LAB_QWEN3_DESIGN_MODEL` 和 `MOON_MEDIA_LAB_QWEN3_CLONE_MODEL`
 覆盖 profile 中的远程模型 ID。
 
-## 输入源
+## 已验证输入源
 
-| 源 | 命令 | 说明 |
-|----|------|------|
-| 本地文件 | `transcribe audio.m4a` | mp3/m4a/wav/mp4/mov… ffmpeg 能读的都行 |
-| 直链 | `transcribe https://…/a.mp3` | 无需配置 |
-| YouTube | `MOON_MEDIA_LAB_COOKIES_BROWSER=chrome transcribe "https://youtu.be/…"` | 需浏览器 cookies + JS 运行时（node）过 n-challenge，均自动检测 |
-| Bilibili | `MOON_MEDIA_LAB_COOKIES_BROWSER=chrome transcribe "https://www.bilibili.com/video/BV…"` | 需 cookies；瞬时 412 自动重试 |
-| 抖音 | `transcribe "https://v.douyin.com/…"` | **免 cookies**——内置直连 CDN 下载 |
-| 播放列表 | `transcribe "<链接>" --playlist --playlist-items 1-10` | 一集一个 job，失败跳过继续 |
+| 平台 | 状态 | 主要入口 | 当前结论 |
+|----|----|------|------|
+| <img src="docs/assets/platforms/local-file.svg" width="22" alt="本地文件"> 本地文件 | ✅ 端到端 | `process video.mp4 --preset knowledge` | ffmpeg 可读的音视频 |
+| <img src="docs/assets/platforms/direct-url.svg" width="22" alt="直链"> HTTP(S) 直链 | ✅ 下载 | `download "https://…/a.mp3"` | 公开媒体直链 |
+| <img src="docs/assets/platforms/youtube.svg" width="22" alt="YouTube"> YouTube | 🧪 流解析 | `process "https://youtu.be/…" --preset english` | Node runtime；受限视频可能需 Cookie |
+| <img src="docs/assets/platforms/bilibili.svg" width="22" alt="Bilibili"> Bilibili | 🟡 条件支持 | `process "https://www.bilibili.com/video/BV…" --preset knowledge` | 历史端到端成功；当前无 Cookie 返回 412 |
+| <img src="docs/assets/platforms/douyin.svg" width="22" alt="抖音"> 抖音 | ✅ 端到端 | `process "https://v.douyin.com/…" --preset knowledge` | 公开短链完整下载和转录已验证 |
 
-在线媒体先下载到 `downloads/`（用 `yt-dlp`；优先用 PATH 上的独立
-二进制）。有反爬的站点设 `MOON_MEDIA_LAB_COOKIES_BROWSER`
+状态不是永久承诺。验证日期、实际命令、失败条件和图标来源见
+[平台支持与验证记录](docs/platform-support.md)。播放列表暂时使用兼容入口：
+`transcribe "<链接>" --playlist --playlist-items 1-10`。
+
+在线媒体先下载到 `downloads/`（一般使用 `yt-dlp`；抖音有独立下载器）。
+有反爬的站点可在知情情况下设置 `MOON_MEDIA_LAB_COOKIES_BROWSER`
 （chrome/firefox/edge…）或 `MOON_MEDIA_LAB_COOKIES_FILE`。
 
 ## job 目录
@@ -355,15 +360,16 @@ MOON_MEDIA_LAB_TTS_VOICE         edge-tts 默认语音
 
 | 系列 | 主题 | 分支 |
 |------|------|------|
-| 0.1.x | **CLI 核心**——优秀的音视频转换、开源就绪、全局安装（当前重点） | `main` |
-| 0.2.x | **Web 体验**——UI/UX 重建到达标；从 `web-ui` 分支合入 | `web-ui` |
-| 0.3.x | **语音及更多**——TTS 产品化、阅读器深化、集成 | 未来 |
+| 0.1.x | **CLI 核心**——音视频转换与本地 ASR | `main` |
+| 0.2.x | **知识资产**——统一 process preset、结构化证据、报告与 Wiki 导出（当前） | `main` |
+| 0.3.x | **体验与 adapter**——增强 UI 与下游集成 | 未来 |
 
 `main` 保持稳定并发布所有版本；大主题在各自分支孵化，成熟后作为
 新系列落地。见 [Roadmap](docs/roadmap.md)。
 
 ## 文档
 
+- [平台支持与验证记录](docs/platform-support.md)
 - [CLI 参考](docs/cli-v1-spec.md)
 - [架构](docs/architecture.md)
 - [引擎 adapter 规范](docs/engine-adapter-spec.md) —— 添加你自己的引擎
@@ -376,6 +382,7 @@ MOON_MEDIA_LAB_TTS_VOICE         edge-tts 默认语音
 - [FunASR](https://github.com/modelscope/FunASR) —— SenseVoice、Paraformer、CAM++
 - [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp)
+- 平台识别图标来自 [Simple Icons](https://simpleicons.org/)（CC0-1.0）
 - 抖音直连下载技巧来自
   [vangie/douyin-transcriber](https://github.com/vangie/douyin-transcriber)（MIT）
 

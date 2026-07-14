@@ -105,6 +105,9 @@ python3 -m venv .venv
 
 ## 4. 在线媒体与播放列表
 
+平台能力会随站点策略变化。先看带图标、日期、验证层级和失败条件的
+[`platform-support.md`](platform-support.md)，再选择命令；没有验证记录的平台不作支持承诺。
+
 直接处理 URL：
 
 ```bash
