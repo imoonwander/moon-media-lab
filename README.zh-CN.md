@@ -19,6 +19,9 @@
         │
         ▼
   knowledge.md · english-study.md · skill-draft.md · transcript.clean.md
+        │
+        ▼
+  可选：Codex gpt-image-2 → 信息结构图 + provenance
 ```
 
 **语音识别全程在你自己的电脑上运行。** LLM 后处理是可选的，走你本来
@@ -42,6 +45,8 @@
 - **字幕** —— 每个 job 都产出 `segments.srt` / `segments.vtt`
 - **LLM 后处理** —— 摘要/大纲/知识卡片、英语学习笔记、SOP 草稿、
   分批并发的转录稿清理
+- **知识可视化** —— 用 Codex 内置 `imagegen` / gpt-image-2 把已确认的
+  `knowledge.md` 生成信息结构图，并保存 prompt 与 provenance
 - **TTS 语音合成** —— `moon-media tts`，基于 Edge 神经语音
 - **自包含模型** —— `models list|download|prune`，断点续传下载，
   `--mirror` 走 hf-mirror.com；绝不写入 `~/.cache`

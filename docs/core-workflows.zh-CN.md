@@ -15,6 +15,7 @@
 | 创作旁白 | 文本 + 音色资产 | `moon-media create narration` | narration、timings、metrics |
 | 断点恢复 | 中断 job | `moon-media resume` | 从 chunk checkpoint 继续 |
 | LLM 后处理 | 完成的 job | `moon-media process` | 知识笔记、清理稿、学习材料、SOP |
+| 知识可视化 | `knowledge.md` | Codex `imagegen` / gpt-image-2 | 信息结构图、prompt、provenance |
 | 模型管理 | 模型名称 | `moon-media models` | 项目本地模型与缓存 |
 | 普通 TTS | 文本 | `moon-media tts` | Edge TTS 音频 |
 | 音色资产库 | 已验收音色 | `assets/voices/` | profile、manifest、reference、samples |
@@ -24,6 +25,7 @@
 
 ```text
 本地文件 / 在线媒体 → ASR job → transcript + subtitles → 可选 LLM 后处理
+  → knowledge.md → 可选 Codex gpt-image-2 信息结构图
 
 文本 / 音色描述 / 授权参考音频
   → TTS / VoiceDesign / VoiceClone
@@ -188,7 +190,33 @@ jobs/transcribe-YYYYMMDD-HHMMSS/
 
 可用 adapter：`claude-cli`、`codex-cli`、`gemini-cli`、`mock`。处理来源写入 `postproc/provenance.json`。
 
-## 7. 普通 TTS
+## 7. 使用 gpt-image-2 生成信息结构图
+
+知识总结通过人工核对后，可以增加一个 Codex 可视化步骤：
+
+```text
+knowledge.md
+  → 提炼受控短标签和结构关系
+  → Codex imagegen / gpt-image-2
+  → 视觉与事实 QC
+  → visuals/*.png + provenance.json
+```
+
+这个步骤由 Codex 内置 `image_gen` 执行，不是本地 `moon-media` CLI。项目不保存
+OpenAI API key，也不把不存在的模型命令写进 shell workflow。
+
+推荐向 Codex 发出：
+
+```text
+读取 jobs/<job-id>/knowledge.md，提炼一张中文信息结构图。
+使用 imagegen skill 和 gpt-image-2；先锁定所有图中文字，再生成。
+最终图片、diagram brief 和 provenance 保存到该 job 的 visuals/。
+```
+
+完整输入输出契约、prompt 模板和 QC 见
+[`knowledge-visualization-workflow.md`](knowledge-visualization-workflow.md)。
+
+## 8. 普通 TTS
 
 适合快速旁白，不建立长期独特音色：
 
@@ -201,7 +229,7 @@ jobs/transcribe-YYYYMMDD-HHMMSS/
 
 也可以把文本文件路径作为第一个参数。Edge TTS 依赖网络；需要长期统一声线时使用音色资产流程。
 
-## 8. 音色设计、克隆与资产
+## 9. 音色设计、克隆与资产
 
 当前推荐 Apple Silicon。主入口统一在 `moon-media` 下：
 
@@ -287,7 +315,7 @@ open output/voice-catalog/index.html
 - [`assets/voices/README.md`](../assets/voices/README.md)
 - [`voice-assets-workflow.md`](voice-assets-workflow.md)
 
-## 9. 模型管理
+## 10. 模型管理
 
 ```bash
 .venv/bin/moon-media models list
@@ -300,7 +328,7 @@ open output/voice-catalog/index.html
 
 模型和缓存都在项目的 `models/`、`cache/`；中断后直接重跑。`prune` 清理残留的 `.part` / `.incomplete`。
 
-## 10. Web UI
+## 11. Web UI
 
 ```bash
 .venv/bin/pip install -e '.[web]'
@@ -309,7 +337,7 @@ open output/voice-catalog/index.html
 
 打开 `http://127.0.0.1:8765`。Web UI 仍是 beta；批处理、精确排障和音色资产管理优先使用 CLI。
 
-## 11. 常见故障
+## 12. 常见故障
 
 | 现象 | 第一检查点 |
 | --- | --- |
@@ -320,12 +348,13 @@ open output/voice-catalog/index.html
 | YouTube/Bilibili 需要登录 | 设置 `MOON_MEDIA_LAB_COOKIES_BROWSER=chrome` |
 | 长任务中断 | `moon-media resume <job>` |
 | LLM 后处理失败 | 单独确认所选 CLI 可用，再看 `run.log` 和 provenance |
+| 信息结构图文字错误 | 缩短并锁定 `Text (verbatim)`，重新生成，不要发布错误版本 |
 | 音色不像 | 更换 10-30 秒、更干净且逐字稿准确的 reference |
 | 音色夹带音乐/混响 | 参考音轨污染；换素材，不要只调 temperature |
 
 排障时报告第一个失败门槛，并附命令、退出码、`run.log`、`state.json` 和相关模型路径。
 
-## 12. 推荐日常顺序
+## 13. 推荐日常顺序
 
 ```text
 1. doctor
@@ -334,8 +363,9 @@ open output/voice-catalog/index.html
 4. 运行 job / voice run
 5. 检查 state.json / run.json 和真实输出
 6. 人工阅读或试听
-7. 必要时 process / export
-8. 下游项目只消费已验收产物
+7. 必要时 process
+8. 已确认的 knowledge 可用 Codex gpt-image-2 生成结构图并做文字 QC
+9. export / 下游项目只消费已验收产物
 ```
 
 快速选择：
@@ -346,5 +376,6 @@ open output/voice-catalog/index.html
 - 用资产生成旁白 → `create narration`
 - 中断后继续 → `resume`
 - 转录变知识笔记 → `process`
+- 知识笔记变信息结构图 → Codex `imagegen` / gpt-image-2
 - 快速普通旁白 → `tts`
 - 最终视频渲染 → 不在本项目；把 narration/timings 交给视频项目

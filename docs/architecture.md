@@ -59,6 +59,11 @@ Post Processors
   skill-draft.md
     |
     v
+Optional Knowledge Visualization
+  Codex built-in image_gen / gpt-image-2
+  diagram brief -> visuals/*.png + provenance
+    |
+    v
 Asset Registry / Creation
   approved voices -> narration + timings + manifest
 ```
@@ -163,6 +168,14 @@ Normalizes:
 Post processors consume normalized transcript only.
 
 They should not call model-specific ASR APIs.
+
+### Knowledge Visualization Adapter
+
+Consumes a reviewed `knowledge.md`, not raw model-specific ASR output. Codex's built-in
+`image_gen` (gpt-image-2) may generate a diagram from an exact-text brief. The job folder owns
+the selected bitmap, prompt, and provenance. This is an agent-level optional adapter rather than
+a fake local CLI command; environments without built-in image generation stop after producing
+the brief.
 
 ## Future Rust/GUI Direction
 

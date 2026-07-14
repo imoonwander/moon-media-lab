@@ -19,6 +19,9 @@ file / YouTube / Bilibili / Douyin / direct URL
         │
         ▼
   knowledge.md · english-study.md · skill-draft.md · transcript.clean.md
+        │
+        ▼
+  optional Codex gpt-image-2 → knowledge diagram + provenance
 ```
 
 Speech recognition runs **entirely on your machine**. LLM post-processing
@@ -45,6 +48,8 @@ is opt-in and goes through whichever CLI you already use (`claude`,
 - **Subtitles** — `segments.srt` / `segments.vtt` for every job
 - **LLM post-processing** — summary/outline/knowledge cards, English
   study notes, SOP drafts, batched+concurrent transcript cleanup
+- **Knowledge visualization** — Codex built-in `imagegen` / gpt-image-2 turns a
+  reviewed `knowledge.md` into a diagram with its prompt and provenance
 - **TTS** — `moon-media tts` via Edge neural voices
 - **Self-contained models** — `models list|download|prune`, resumable
   downloads, `--mirror` for hf-mirror.com; nothing writes to `~/.cache`
