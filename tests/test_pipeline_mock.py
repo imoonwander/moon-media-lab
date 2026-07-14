@@ -1,6 +1,7 @@
 import json
 
 from moon_media_lab.cli import main
+from moon_media_lab.pipelines.process import actions_for
 
 
 def test_mock_transcribe_end_to_end(lab_home, capsys):
@@ -51,3 +52,53 @@ def test_version_flag(capsys):
     except SystemExit as exc:
         assert exc.code == 0
     assert "moon-media-lab" in capsys.readouterr().out
+
+
+def test_process_source_with_transcript_preset(lab_home):
+    source = lab_home / "source.txt"
+    source.write_text("第一段。\n第二段。\n", encoding="utf-8")
+
+    assert (
+        main(
+            [
+                "process",
+                str(source),
+                "--preset",
+                "transcript",
+                "--engine",
+                "mock",
+                "--kind",
+                "text",
+                "--language",
+                "zh",
+            ]
+        )
+        == 0
+    )
+    jobs = list((lab_home / "jobs").glob("transcribe-*"))
+    assert len(jobs) == 1
+    assert (jobs[0] / "transcript.raw.json").is_file()
+    assert not (jobs[0] / "knowledge.md").exists()
+
+
+def test_process_existing_job_adds_output_without_retranscribing(lab_home):
+    source = lab_home / "source.txt"
+    source.write_text("知识应该连接行动。\n", encoding="utf-8")
+    assert main(["transcribe", str(source), "--engine", "mock", "--kind", "text"]) == 0
+    job = next((lab_home / "jobs").glob("transcribe-*"))
+    original = (job / "transcript.raw.json").read_bytes()
+
+    assert main(["process", str(job), "--add", "recommendations", "--llm", "mock"]) == 0
+    assert (job / "recommendations.md").is_file()
+    assert (job / "transcript.raw.json").read_bytes() == original
+
+
+def test_download_rejects_local_path(lab_home):
+    assert main(["download", str(lab_home / "video.mp4")]) == 2
+
+
+def test_process_preset_actions_are_ordered_and_deduplicated():
+    assert actions_for("wiki", ["knowledge", "speaker-notes"])[-2:] == [
+        "wiki",
+        "speaker-notes",
+    ]

@@ -88,16 +88,16 @@ pipx install 'moon-media-lab[asr-sensevoice,asr-whisper,url,tts-edge]'
 ## 快速上手
 
 ```bash
-# 自带的 8 秒中文样例
-.venv/bin/moon-media transcribe examples/hello-zh.wav --language zh
+# 统一入口；本地文件直接引用，不复制
+.venv/bin/moon-media process examples/hello-zh.wav --preset transcript --language zh
 
 # 带说话人标签的中文访谈（首次会下载约 1.2 GB 模型）
-.venv/bin/moon-media transcribe interview.m4a --language zh --diarization
+.venv/bin/moon-media process interview.m4a --preset interview --language zh
 
 # YouTube 英文播客（首次下载约 1.6 GB；国内加 --mirror）
 .venv/bin/moon-media models download large-v3-turbo --mirror
 MOON_MEDIA_LAB_COOKIES_BROWSER=chrome \
-  .venv/bin/moon-media transcribe "https://youtu.be/..." --language en
+  .venv/bin/moon-media process "https://youtu.be/..." --preset english --language en
 
 # 用你已有的 LLM 命令行后处理一个完成的 job
 .venv/bin/moon-media process jobs/transcribe-... --mode knowledge --clean --llm codex-cli
@@ -116,12 +116,13 @@ MOON_MEDIA_LAB_COOKIES_BROWSER=chrome \
 | 命令 | 用途 |
 |------|------|
 | `doctor` | 体检报告：ffmpeg、引擎、LLM 命令行、模型、裁决 |
-| `learn media\|voice` | 从媒体或音色来源学习并沉淀结果 |
+| `process <来源或job>` | 统一处理本地文件、URL 或已有 job；支持 preset 和增量产物 |
+| `download <URL>` | 只下载线上视频/音频，不转录 |
+| `learn media\|voice` | 兼容旧入口；新媒体流程优先使用 `process` |
 | `assets voices list\|show\|approve\|preview` | 查看、审核音色并生成公开预览页 |
 | `create narration` | 用音色资产生成旁白与逐句时间轴 |
-| `transcribe <源>` | 把文件/链接转成转录 job |
+| `transcribe <源>` | 只建立转录和字幕 job 的底层入口 |
 | `resume <job目录>` | 续跑一个被中断的转录 job |
-| `process <job目录>` | 对完成的 job 做 LLM 后处理 |
 | `package <job目录>` | 生成四层知识资产 `knowledge-bundle.manifest.json` |
 | `export wiki <job目录>` | 导出厂商无关的 Markdown + JSON Wiki 包 |
 | `models list\|download\|prune` | 管理本地 ASR 模型 |
@@ -129,7 +130,29 @@ MOON_MEDIA_LAB_COOKIES_BROWSER=chrome \
 | `moon-media-voice-case` | 底层兼容入口；新流程优先使用上面的生命周期命令 |
 | `serve` | 本地 Web 界面（beta） |
 
-### transcribe
+### process：统一入口
+
+```bash
+moon-media process <本地文件|URL|job目录> --preset <目标>
+```
+
+Preset：`transcript`、`knowledge`、`interview`、`english`、`research`、`wiki`。
+本地文件只引用原路径；URL 按需下载；已有 job 不重新转录。
+
+```bash
+# 一步生成 Wiki-ready 知识包
+moon-media process video.mp4 --preset wiki
+
+# 为已有 job 增加产物
+moon-media process jobs/transcribe-... --add recommendations
+moon-media process jobs/transcribe-... --add structured-knowledge
+
+# 只获取线上媒体，不进入转录
+moon-media download <URL>
+moon-media download <URL> --format audio
+```
+
+### transcribe：底层转录入口
 
 ```bash
 moon-media transcribe <源> [选项]
@@ -152,10 +175,10 @@ moon-media transcribe <源> [选项]
 `--engine auto` 时的语言路由：`zh → sensevoice`（带 `--diarization`
 则 `paraformer`），`en`/`mixed → faster-whisper`。
 
-### process
+### 已有 job 的兼容参数
 
-对完成的 job 做后处理，**无需重新转录**——转录产物已在磁盘上，
-所以可以廉价地重跑和重试。
+旧的 job 后处理参数继续可用，等价于新的 `--add`。转录产物已在磁盘上，
+不会重新运行 ASR。
 
 ```bash
 moon-media process <job目录> [--mode ...] [--clean] [--name-speakers] [--llm ...]

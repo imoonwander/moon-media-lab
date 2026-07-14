@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import sys
@@ -176,50 +177,81 @@ def command_resume(args: argparse.Namespace) -> int:
 
 
 def command_process(args: argparse.Namespace) -> int:
-    from moon_media_lab.llm.registry import get_llm_provider
-    from moon_media_lab.postproc.runner import (
-        clean_transcript,
-        generate_mode_doc,
-        load_result,
-        name_speakers,
-    )
+    from moon_media_lab.pipelines.process import actions_for, is_job_dir, process_job
 
-    from moon_media_lab.jobs import update_state
+    additions = list(args.add or [])
+    if args.mode and args.mode not in additions:
+        additions.append(args.mode)
+    if args.clean and "clean" not in additions:
+        additions.append("clean")
+    if args.name_speakers and "name-speakers" not in additions:
+        additions.append("name-speakers")
 
-    job_dir = Path(args.job_dir)
-    result = load_result(job_dir)
-    provider = get_llm_provider(args.llm)
-    if not (args.name_speakers or args.clean or args.mode):
+    target_is_job = is_job_dir(args.target)
+    preset = args.preset
+    if target_is_job and not (preset or additions):
         raise InvalidArguments(
             "Nothing to do.",
             hint=(
-                "Pass --mode knowledge|speaker-notes|english-transcript|"
-                "structured-knowledge|recommendations, --clean, and/or --name-speakers."
+                "Pass --preset, --add, --mode, --clean, and/or --name-speakers. "
+                "Existing process <job> flags remain compatible."
             ),
         )
-    import time as _time
-
-    update_state(
-        job_dir,
-        "postprocessing",
-        percent=None,
-        eta_sec=None,
-        stage_started_at=int(_time.time()),
-    )
-    outputs = []
-    try:
-        if args.name_speakers:
-            outputs.append(name_speakers(result, provider, job_dir))
-        if args.clean:
-            outputs.append(clean_transcript(result, provider, job_dir))
-        if args.mode:
-            outputs.append(generate_mode_doc(result, args.mode, provider, job_dir))
-    except Exception as exc:
-        update_state(job_dir, "postprocess_failed", error=str(exc))
-        raise
-    update_state(job_dir, "done")
+    if target_is_job:
+        job_dir = Path(args.target)
+        actions = actions_for(preset, additions)
+    else:
+        preset = preset or "knowledge"
+        actions = actions_for(preset, additions)
+        job_dir = run_transcription(
+            args.target,
+            mode="transcript",
+            language=args.language,
+            engine_name=args.engine,
+            kind=args.kind,
+            need_diarization=args.diarization or preset == "interview",
+            need_word_timestamps=args.word_timestamps,
+            job_base_dir=Path(args.job_dir) if args.job_dir else None,
+            model_dir=args.model_dir,
+            chunk_sec=args.chunk_sec,
+            llm=args.llm,
+        )
+        print(job_dir)
+    outputs = process_job(job_dir, actions=actions, llm=args.llm, force=args.force)
     for output in outputs:
         print(output)
+    return 0
+
+
+def command_download(args: argparse.Namespace) -> int:
+    from moon_media_lab.jobs import write_json
+    from moon_media_lab.media.downloader import download_media, is_url
+
+    if not is_url(args.url):
+        raise InvalidArguments(
+            f"download expects an HTTP(S) URL: {args.url}",
+            hint="Local files are referenced directly by `moon-media process <path>`.",
+        )
+    output_dir = Path(args.output_dir) if args.output_dir else get_paths().downloads
+    media_path = download_media(args.url, output_dir, media_format=args.format)
+    digest = hashlib.sha256(media_path.read_bytes()).hexdigest()
+    source_path = media_path.with_suffix(media_path.suffix + ".source.json")
+    write_json(
+        source_path,
+        {
+            "source": args.url,
+            "file": media_path.name,
+            "format": args.format,
+            "sha256": digest,
+        },
+    )
+    print(
+        json.dumps(
+            {"media": str(media_path), "source": str(source_path)},
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
     return 0
 
 
@@ -362,6 +394,8 @@ def _add_transcribe_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    from moon_media_lab.pipelines.process import ADD_ACTIONS, PRESETS
+
     parser = argparse.ArgumentParser(prog="moon-media", description="Moon Media Lab CLI")
     parser.add_argument("--version", action="version", version=f"moon-media-lab {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -457,10 +491,40 @@ def build_parser() -> argparse.ArgumentParser:
     resume.add_argument("--llm", default="auto", help="LLM provider for post-processing")
     resume.set_defaults(func=command_resume)
 
-    process = subparsers.add_parser(
-        "process", help="Run LLM post-processing on a finished transcribe job"
+    download = subparsers.add_parser(
+        "download", help="Download an online source without transcribing or analyzing it"
     )
-    process.add_argument("job_dir", help="Path to the jobs/transcribe-... folder")
+    download.add_argument("url", help="HTTP(S) media URL")
+    download.add_argument(
+        "--format", choices=["video", "audio"], default="video", help="Downloaded media type"
+    )
+    download.add_argument("--output-dir", help="Override the downloads directory")
+    download.set_defaults(func=command_download)
+
+    process = subparsers.add_parser(
+        "process", help="Process a local file, URL, or existing transcript job"
+    )
+    process.add_argument("target", help="Local media path, HTTP(S) URL, or jobs/transcribe-* dir")
+    process.add_argument(
+        "--preset",
+        choices=list(PRESETS),
+        help="End-to-end output profile (default: knowledge for a new source)",
+    )
+    process.add_argument(
+        "--add",
+        action="append",
+        choices=ADD_ACTIONS,
+        help="Add one output to the preset; repeat for multiple outputs",
+    )
+    process.add_argument("--force", action="store_true", help="Regenerate existing artifacts")
+    process.add_argument("--language", choices=["auto", "zh", "en", "mixed"], default="auto")
+    process.add_argument("--engine", default="auto")
+    process.add_argument("--kind", choices=["file", "url", "text"], default="file")
+    process.add_argument("--diarization", action="store_true")
+    process.add_argument("--word-timestamps", action="store_true")
+    process.add_argument("--job-dir", help="Override jobs root for a new source")
+    process.add_argument("--model-dir", help="Override the ASR model path")
+    process.add_argument("--chunk-sec", type=int, default=DEFAULT_CHUNK_SEC)
     process.add_argument(
         "--mode",
         choices=[
@@ -472,15 +536,15 @@ def build_parser() -> argparse.ArgumentParser:
             "structured-knowledge",
             "recommendations",
         ],
-        help="Generate this document from the transcript",
+        help="Legacy alias for --add on an existing job",
     )
     process.add_argument(
-        "--clean", action="store_true", help="Produce transcript.clean.md (batched cleanup)"
+        "--clean", action="store_true", help="Legacy alias for --add clean"
     )
     process.add_argument(
         "--name-speakers",
         action="store_true",
-        help="Infer names/roles for SPEAKER_NN labels and re-render transcript/subtitles",
+        help="Legacy alias for --add name-speakers",
     )
     process.add_argument("--llm", default="auto", help="LLM provider (claude-cli|mock)")
     process.set_defaults(func=command_process)

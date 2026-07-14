@@ -158,6 +158,11 @@ mode document in one call; `--clean` produces `transcript.clean.md`
 in checkpointed batches. `postproc/provenance.json` records which
 provider saw the data and whether it left the machine.
 
+Since 0.2.1, `moon-media process <source-or-job> --preset ...` is the unified public entry,
+with repeatable `--add` actions for existing jobs. `moon-media download <URL>` stops after
+acquisition and writes a source sidecar. The older process flags and `learn media` remain
+compatible.
+
 Deliverables:
 
 - transcript cleanup (done, batched + checkpointed)

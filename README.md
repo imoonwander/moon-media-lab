@@ -94,16 +94,16 @@ For URL ingestion a standalone `yt-dlp` binary on PATH is preferred
 ## Quickstart
 
 ```bash
-# bundled 8-second sample (Chinese)
-.venv/bin/moon-media transcribe examples/hello-zh.wav --language zh
+# Unified entry; local files are referenced, not copied
+.venv/bin/moon-media process examples/hello-zh.wav --preset transcript --language zh
 
 # a Chinese interview with speaker labels (first run downloads ~1.2 GB of models)
-.venv/bin/moon-media transcribe interview.m4a --language zh --diarization
+.venv/bin/moon-media process interview.m4a --preset interview --language zh
 
 # an English podcast from YouTube (first run downloads ~1.6 GB; use --mirror in CN)
 .venv/bin/moon-media models download large-v3-turbo --mirror
 MOON_MEDIA_LAB_COOKIES_BROWSER=chrome \
-  .venv/bin/moon-media transcribe "https://youtu.be/..." --language en
+  .venv/bin/moon-media process "https://youtu.be/..." --preset english --language en
 
 # post-process a finished job with the LLM CLI you already have
 .venv/bin/moon-media process jobs/transcribe-... --mode knowledge --clean --llm codex-cli
@@ -126,20 +126,40 @@ post-processing outputs. The job folder is the API — nothing else to learn.
 | Command | Purpose |
 |---------|---------|
 | `doctor` | Health report: ffmpeg, engines, LLM CLIs, models, verdict |
-| `learn media\|voice` | Learn from media or a voice source and retain the result |
+| `process <source-or-job>` | Unified local file, URL, or existing-job workflow with presets |
+| `download <url>` | Download online video/audio without transcription |
+| `learn media\|voice` | Compatibility entry; prefer `process` for new media workflows |
 | `assets voices list\|show\|approve\|preview` | Inspect, approve, and preview voice assets |
 | `package <job-dir>` | Build the four-layer knowledge asset manifest |
 | `export wiki <job-dir>` | Export portable Markdown + JSON knowledge assets |
 | `create narration` | Create narration and sentence timings from a voice asset |
-| `transcribe <source>` | Turn a file/URL into a transcript job |
+| `transcribe <source>` | Low-level transcript and subtitle job |
 | `resume <job-dir>` | Continue an interrupted transcribe job |
-| `process <job-dir>` | Run LLM post-processing on a finished job |
 | `models list\|download\|prune` | Manage local ASR models |
 | `tts <text>` | Text to speech (edge-tts) |
 | `moon-media-voice-case` | Low-level compatibility entry; prefer lifecycle commands above |
 | `serve` | Local web UI (beta) |
 
-### transcribe
+### process: unified entry
+
+```bash
+moon-media process <local-file|URL|job-dir> --preset <goal>
+```
+
+Presets: `transcript`, `knowledge`, `interview`, `english`, `research`, and `wiki`.
+Local files are referenced directly, URLs are downloaded when needed, and existing jobs are not
+re-transcribed.
+
+```bash
+moon-media process video.mp4 --preset wiki
+moon-media process jobs/transcribe-... --add recommendations
+moon-media process jobs/transcribe-... --add structured-knowledge
+
+moon-media download <URL>
+moon-media download <URL> --format audio
+```
+
+### transcribe: low-level entry
 
 ```bash
 moon-media transcribe <source> [options]
@@ -162,10 +182,10 @@ moon-media transcribe <source> [options]
 Language routing when `--engine auto`: `zh → sensevoice`
 (or `paraformer` with `--diarization`), `en`/`mixed → faster-whisper`.
 
-### process
+### existing-job compatibility flags
 
-Post-process a finished job **without re-transcribing** — transcript
-artifacts are already on disk, so this is cheap to re-run and to retry.
+The original job post-processing flags remain compatible and map to the new `--add` actions.
+Existing transcript artifacts are never re-transcribed.
 
 ```bash
 moon-media process <job-dir> [--mode ...] [--clean] [--name-speakers] [--llm ...]
@@ -318,9 +338,9 @@ the patch version.
 
 | Series | Theme | Branch |
 |--------|-------|--------|
-| 0.1.x  | **CLI core** — excellent audio/video conversion, open-source ready, global install (current focus) | `main` |
-| 0.2.x  | **Web experience** — UI/UX rebuilt to expectation; merges from the `web-ui` branch | `web-ui` |
-| 0.3.x  | **Voice & beyond** — TTS as a product line, reader deepening, integrations | future |
+| 0.1.x  | **CLI core** — audio/video conversion and local ASR | `main` |
+| 0.2.x  | **Knowledge assets** — unified process presets, structured evidence, reports and Wiki export (current) | `main` |
+| 0.3.x  | **Experience & adapters** — stronger UI and downstream integrations | future |
 
 `main` stays stable and cuts all releases; big themes incubate on their
 own branch and land as a new series. See [Roadmap](docs/roadmap.md).

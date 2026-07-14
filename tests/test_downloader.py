@@ -1,5 +1,7 @@
+import pytest
+
 from moon_media_lab.media.douyin import is_douyin_url, resolve_video_id
-from moon_media_lab.media.downloader import is_url
+from moon_media_lab.media.downloader import _format_selector, is_url
 
 
 def test_is_url():
@@ -7,6 +9,13 @@ def test_is_url():
     assert is_url("http://example.com")
     assert not is_url("/local/path.mp3")
     assert not is_url("file.mp4")
+
+
+def test_download_format_selectors():
+    assert _format_selector("audio") == "bestaudio/best"
+    assert _format_selector("video") == "bestvideo*+bestaudio/best"
+    with pytest.raises(ValueError):
+        _format_selector("document")
 
 
 def test_is_douyin_url():

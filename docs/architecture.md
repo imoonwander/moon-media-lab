@@ -3,13 +3,13 @@
 ## Product Lifecycle
 
 ```text
-Learn
-  media -> transcript / subtitles / notes
-  voice -> designed or authorized cloned reference
+Process
+  local file / URL / existing job
+  preset -> transcript / knowledge / report / Wiki bundle
     |
     v
 Assets
-  source / transcript / knowledge / derivative asset layers
+  source / transcript / knowledge / derivative layers
     |
     v
 Create
@@ -72,8 +72,9 @@ Asset Registry / Creation
 
 ### CLI
 
-Expose lifecycle commands (`learn`, `assets`, `create`) and compatibility expert commands
-(`transcribe`, `process`, `tts`, `models`). It should not know model-specific details.
+Expose `process` as the primary media command and `download` as acquisition-only. Keep
+`transcribe`, `package`, `export`, and `models` as composable expert commands. Voice compatibility
+commands load the optional voice plugin and should not leak model-specific details into the core.
 
 ### Knowledge Asset Registry
 

@@ -69,12 +69,22 @@ def _ua_args(url: str) -> list[str]:
     return []
 
 
-def _download_via_binary(binary: str, url: str, downloads_dir: Path) -> Path:
+def _format_selector(media_format: str) -> str:
+    if media_format == "audio":
+        return "bestaudio/best"
+    if media_format == "video":
+        return "bestvideo*+bestaudio/best"
+    raise ValueError(f"Unknown download format: {media_format}")
+
+
+def _download_via_binary(
+    binary: str, url: str, downloads_dir: Path, media_format: str
+) -> Path:
     argv = [
         binary,
         "--no-playlist",
         "-f",
-        "bestaudio/best",
+        _format_selector(media_format),
         "-o",
         str(downloads_dir / OUTPUT_TEMPLATE),
         "--no-simulate",
@@ -85,8 +95,10 @@ def _download_via_binary(binary: str, url: str, downloads_dir: Path) -> Path:
         *_cookie_args(),
         *_js_runtime_args(),
         *_ua_args(url),
-        url,
     ]
+    if media_format == "video":
+        argv += ["--merge-output-format", "mp4"]
+    argv.append(url)
     completed = subprocess.run(argv, capture_output=True, text=True)
     if completed.returncode != 0:
         raise MediaProbeFailed(
@@ -100,7 +112,7 @@ def _download_via_binary(binary: str, url: str, downloads_dir: Path) -> Path:
     return Path(lines[-1])
 
 
-def _download_via_module(url: str, downloads_dir: Path) -> Path:
+def _download_via_module(url: str, downloads_dir: Path, media_format: str) -> Path:
     if importlib.util.find_spec("yt_dlp") is None:
         raise EngineNotInstalled(
             "yt-dlp is not installed for URL ingestion.",
@@ -110,12 +122,14 @@ def _download_via_module(url: str, downloads_dir: Path) -> Path:
     import yt_dlp
 
     options = {
-        "format": "bestaudio/best",
+        "format": _format_selector(media_format),
         "outtmpl": str(downloads_dir / OUTPUT_TEMPLATE),
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
     }
+    if media_format == "video":
+        options["merge_output_format"] = "mp4"
     browser = os.environ.get("MOON_MEDIA_LAB_COOKIES_BROWSER")
     if browser:
         options["cookiesfrombrowser"] = (browser,)
@@ -127,7 +141,14 @@ def _download_via_module(url: str, downloads_dir: Path) -> Path:
             info = ydl.extract_info(url, download=True)
             if "entries" in info:  # playlist despite noplaylist, take first
                 info = info["entries"][0]
-            return Path(ydl.prepare_filename(info))
+            prepared = Path(ydl.prepare_filename(info))
+            # prepare_filename describes the extractor's pre-merge container.
+            # yt-dlp may move the final merged video to an mp4 sibling.
+            if media_format == "video":
+                merged = prepared.with_suffix(".mp4")
+                if merged.is_file():
+                    return merged
+            return prepared
     except Exception as exc:  # noqa: BLE001 - yt-dlp raises many error types
         raise MediaProbeFailed(
             f"Download failed for {url}: {exc}",
@@ -136,8 +157,12 @@ def _download_via_module(url: str, downloads_dir: Path) -> Path:
         ) from exc
 
 
-def download_media(url: str, downloads_dir: Path) -> Path:
-    """Download online media as audio via yt-dlp; return the local file path."""
+def download_media(url: str, downloads_dir: Path, *, media_format: str = "audio") -> Path:
+    """Download online media via yt-dlp; return the local file path.
+
+    Transcription uses the audio default. The public `download` command requests
+    video by default so acquisition remains independent from knowledge processing.
+    """
     downloads_dir.mkdir(parents=True, exist_ok=True)
     binary = _external_ytdlp()
     # Sites rate-limit bursts (e.g. Bilibili HTTP 412); brief retries absorb them.
@@ -151,9 +176,9 @@ def download_media(url: str, downloads_dir: Path) -> Path:
                 path = download_douyin(url, downloads_dir)
             else:
                 path = (
-                    _download_via_binary(binary, url, downloads_dir)
+                    _download_via_binary(binary, url, downloads_dir, media_format)
                     if binary
-                    else _download_via_module(url, downloads_dir)
+                    else _download_via_module(url, downloads_dir, media_format)
                 )
             break
         except MediaProbeFailed:

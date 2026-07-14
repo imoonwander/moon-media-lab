@@ -9,12 +9,13 @@
 | 能力 | 输入 | 命令 | 主要输出 |
 | --- | --- | --- | --- |
 | 环境体检 | 本机环境 | `moon-media doctor` | 引擎、模型、ffmpeg、LLM CLI 状态 |
-| 学习媒体 | 音频/视频/URL | `moon-media learn media` | 转录、字幕、知识文档、job |
+| 处理媒体 | 音频/视频/URL/job | `moon-media process` | 按 preset 生成转录、知识、报告或 Wiki 包 |
+| 仅下载 | 在线 URL | `moon-media download` | 原始视频/音频和来源 sidecar |
 | 学习音色 | 描述或授权参考音 | `moon-media learn voice` | 版本化候选音色资产 |
 | 查看资产 | 本地资产库 | `moon-media assets` | 资产列表、状态与 manifest |
 | 创作旁白 | 文本 + 音色资产 | `moon-media create narration` | narration、timings、metrics |
 | 断点恢复 | 中断 job | `moon-media resume` | 从 chunk checkpoint 继续 |
-| LLM 后处理 | 完成的 job | `moon-media process` | 知识笔记、清理稿、学习材料、SOP |
+| 底层转录 | 音频/视频/URL | `moon-media transcribe` | 只创建转录 job，供脚本和排障使用 |
 | 知识可视化 | `knowledge.md` | Codex `imagegen` / gpt-image-2 | 信息结构图、prompt、provenance |
 | 知识资产化 | 完成的 job | `moon-media package` | 四层 manifest、hash、provenance |
 | Wiki 导出 | 知识 job | `moon-media export wiki` | Markdown + JSON 可移植资产包 |
@@ -73,58 +74,64 @@ python3 -m venv .venv
 
 不要只看模型目录；模型存在不代表 Python 引擎依赖已经可用。
 
-## 3. 转写本地媒体
+## 3. 处理本地媒体
 
 中文：
 
 ```bash
-.venv/bin/moon-media learn media interview.m4a --language zh
+.venv/bin/moon-media process interview.m4a --preset knowledge --language zh
 ```
 
 中文访谈 + 说话人标签：
 
 ```bash
-.venv/bin/moon-media learn media interview.m4a \
-  --language zh --diarization
+.venv/bin/moon-media process interview.m4a --preset interview --language zh
 ```
 
 英文逐词时间戳：
 
 ```bash
-.venv/bin/moon-media learn media podcast.mp3 \
-  --language en --word-timestamps
+.venv/bin/moon-media process podcast.mp3 \
+  --preset english --language en --word-timestamps
 ```
 
 中英混合：
 
 ```bash
-.venv/bin/moon-media learn media meeting.mp4 --language mixed
+.venv/bin/moon-media process meeting.mp4 --preset knowledge --language mixed
 ```
 
 自动路由：`zh → SenseVoice`；中文加 `--diarization → Paraformer + CAM++`；`en/mixed → faster-whisper`。一般不要强制引擎，排查时才加 `--engine`。
 
 ## 4. 在线媒体与播放列表
 
-直链：
+直接处理 URL：
 
 ```bash
-.venv/bin/moon-media learn media "https://example.com/audio.mp3" --language zh
+.venv/bin/moon-media process "https://example.com/audio.mp3" --preset knowledge --language zh
 ```
 
 YouTube / Bilibili：
 
 ```bash
 MOON_MEDIA_LAB_COOKIES_BROWSER=chrome \
-  .venv/bin/moon-media learn media "<URL>" --language zh
+  .venv/bin/moon-media process "<URL>" --preset knowledge --language zh
 ```
 
 抖音：
 
 ```bash
-.venv/bin/moon-media learn media "https://v.douyin.com/..." --language zh
+.venv/bin/moon-media process "https://v.douyin.com/..." --preset knowledge --language zh
 ```
 
-播放列表：
+只下载、不转录或总结：
+
+```bash
+.venv/bin/moon-media download "<URL>" --format video
+.venv/bin/moon-media download "<URL>" --format audio
+```
+
+下载结果带 `.source.json` sidecar，记录来源 URL、格式和 SHA-256。播放列表暂时使用兼容入口：
 
 ```bash
 .venv/bin/moon-media learn media "<playlist-url>" \
@@ -155,7 +162,7 @@ jobs/transcribe-YYYYMMDD-HHMMSS/
 长音频切块：
 
 ```bash
-.venv/bin/moon-media learn media long.mp3 --language zh --chunk-sec 600
+.venv/bin/moon-media process long.mp3 --preset knowledge --language zh --chunk-sec 600
 ```
 
 中断后继续：
@@ -166,28 +173,41 @@ jobs/transcribe-YYYYMMDD-HHMMSS/
 
 判断成功要看本次 `state.json`、`run.log` 和真实产物，不能只看同日期文件名。
 
-## 6. LLM 后处理
+## 6. preset 与已有 job 增量处理
 
-后处理读取已有转录，不重新跑 ASR：
+新来源用 preset 表达目标：
+
+| preset | 主要产物 |
+| --- | --- |
+| `transcript` | 源文稿与字幕 |
+| `knowledge` | 整理稿、知识稿、结构化知识 |
+| `interview` | 说话人识别、角色稿、知识资产 |
+| `english` | 英文整理稿、学习稿、结构化知识 |
+| `research` | 知识稿、结构化知识、推荐报告 |
+| `wiki` | 完整知识层、推荐报告、manifest、Wiki export |
+
+已有 job 用 `--add` 增量生成，不重新跑 ASR：
 
 ```bash
 .venv/bin/moon-media process jobs/transcribe-... \
-  --mode knowledge --llm codex-cli
+  --add recommendations --llm codex-cli
 ```
 
 | 操作 | 参数 | 输出 |
 | --- | --- | --- |
-| 知识整理 | `--mode knowledge` | `knowledge.md` |
-| 英语学习 | `--mode english-study` | `english-study.md` |
-| 提炼 SOP | `--mode skill` | `skill-draft.md` |
-| 清理转录 | `--clean` | `transcript.clean.md` |
-| 说话人命名 | `--name-speakers` | 重写 transcript 和字幕 |
+| 知识整理 | `--add knowledge` | `knowledge.md` |
+| 结构化知识 | `--add structured-knowledge` | `knowledge.structured.json` |
+| 推荐报告 | `--add recommendations` | `recommendations.md` |
+| 英语学习 | `--add english-study` | `english-study.md` |
+| 提炼 SOP | `--add skill` | `skill-draft.md` |
+| 清理转录 | `--add clean` | `transcript.clean.md` |
+| 说话人命名 | `--add name-speakers` | 重写 transcript 和字幕 |
 
 组合示例：
 
 ```bash
 .venv/bin/moon-media process jobs/transcribe-... \
-  --mode knowledge --clean --name-speakers --llm claude-cli
+  --add clean --add knowledge --add name-speakers --llm claude-cli
 ```
 
 可用 adapter：`claude-cli`、`codex-cli`、`gemini-cli`、`mock`。处理来源写入 `postproc/provenance.json`。
@@ -365,19 +385,21 @@ open output/voice-catalog/index.html
 4. 运行 job / voice run
 5. 检查 state.json / run.json 和真实输出
 6. 人工阅读或试听
-7. 必要时 process
+7. 用 preset 或 `--add` 补齐目标资产
 8. 已确认的 knowledge 可用 Codex gpt-image-2 生成结构图并做文字 QC
 9. export / 下游项目只消费已验收产物
 ```
 
 快速选择：
 
-- 音视频/URL 学习 → `learn media`
+- 音视频/URL/job 加工 → `process --preset ...`
+- 只获取在线原始媒体 → `download`
+- 播放列表批处理（兼容期）→ `learn media --playlist`
 - 描述或参考音频学习音色 → `learn voice design|clone`
 - 查看、审核与预览音色资产 → `assets voices list|show|approve|preview`
 - 用资产生成旁白 → `create narration`
 - 中断后继续 → `resume`
-- 转录变知识笔记 → `process`
+- 底层单次转录与排障 → `transcribe`
 - 知识笔记变信息结构图 → Codex `imagegen` / gpt-image-2
 - 快速普通旁白 → `tts`
 - 最终视频渲染 → 不在本项目；把 narration/timings 交给视频项目

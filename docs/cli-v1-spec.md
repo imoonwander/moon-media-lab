@@ -7,17 +7,39 @@ The first public interface should be CLI-only.
 The media knowledge lifecycle is:
 
 ```text
-moon-media learn media ...
-moon-media process ...
+moon-media process <source-or-job> --preset ...
 moon-media package ...
 moon-media export wiki ...
 ```
 
-Low-level commands (`transcribe`, `process`, `models`) remain stable for scripts and advanced
-use. Voice commands remain compatibility interfaces and load `moon-voice-lab` when installed;
-new voice-only workflows should use `moon-voice` directly.
+`process` is the primary media entry. `download` stops after acquisition. Low-level commands
+(`transcribe`, `package`, `export`, `models`) remain stable for scripts and advanced use.
+`learn media` is retained as a compatibility entry, while voice commands load `moon-voice-lab`
+when installed; new voice-only workflows should use `moon-voice` directly.
 
-### learn
+### process
+
+```bash
+moon-media process interview.mp4 --preset interview --language zh
+moon-media process "https://example.com/video" --preset wiki
+moon-media process jobs/transcribe-... --add recommendations
+```
+
+Presets express the target bundle: `transcript`, `knowledge`, `interview`, `english`,
+`research`, or `wiki`. `--add` augments a preset or an existing job and may be repeated.
+Existing output is reused unless `--force` is set.
+
+### download
+
+```bash
+moon-media download "https://example.com/video" --format video
+moon-media download "https://example.com/video" --format audio
+```
+
+This command does not transcribe or call an LLM. It writes a source sidecar containing the
+source URL, selected format, output file name, and SHA-256.
+
+### learn (compatibility)
 
 ```bash
 moon-media learn media <source> --language zh --mode knowledge
@@ -33,7 +55,7 @@ moon-media learn voice clone reference.mp4 \
   --authorization-confirmed
 ```
 
-`learn media` uses the transcribe pipeline. `learn voice` creates a candidate asset under
+`learn media` uses the legacy transcribe pipeline. `learn voice` creates a candidate asset under
 `assets/voices/<voice-id>/`; it never silently overwrites an existing version.
 
 ### assets
@@ -126,7 +148,7 @@ moon-media resume jobs/transcribe-20260703-221149
 
 Continues an interrupted transcribe job from its per-chunk checkpoints.
 
-### process
+### legacy process flags
 
 ```bash
 moon-media process jobs/transcribe-20260703-221149 \
@@ -135,7 +157,7 @@ moon-media process jobs/transcribe-20260703-221149 \
   --llm claude-cli
 ```
 
-Runs LLM post-processing on a finished transcribe job:
+These flags remain aliases for existing scripts that post-process a finished job:
 
 ```text
 --mode knowledge|english-study|skill        generate the mode document

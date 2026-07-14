@@ -36,7 +36,7 @@ The user does not only want raw transcription. The useful output is:
 `moon_media_lab` is not just an ASR wrapper. Its product lifecycle is:
 
 ```text
-ingest -> transcribe -> organize -> understand -> package -> export
+process source -> transcribe -> organize -> understand -> package -> export
 ```
 
 It should own:
