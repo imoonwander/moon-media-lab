@@ -246,6 +246,22 @@ assets/voices/<voice-id>/
 .venv/bin/moon-media assets voices show authorized-reader-v1
 ```
 
+审核可对外展示的试听样本并生成静态预览页：
+
+```bash
+.venv/bin/moon-media assets voices approve authorized-reader-v1 \
+  --name "Moon Reader" \
+  --summary "温暖、清醒、克制的中文旁白" \
+  --sample public-preview.wav \
+  --usage-note "公开试听；第三方复用需另行授权" \
+  --public-release-confirmed
+
+.venv/bin/moon-media assets voices preview
+open output/voice-catalog/index.html
+```
+
+预览页只收录明确确认公开权利的音色，不会带出参考音、逐字稿和内部参数。
+
 使用音色资产创作旁白：
 
 ```bash
@@ -326,7 +342,7 @@ assets/voices/<voice-id>/
 
 - 音视频/URL 学习 → `learn media`
 - 描述或参考音频学习音色 → `learn voice design|clone`
-- 查看沉淀资产 → `assets voices list|show`
+- 查看、审核与预览音色资产 → `assets voices list|show|approve|preview`
 - 用资产生成旁白 → `create narration`
 - 中断后继续 → `resume`
 - 转录变知识笔记 → `process`

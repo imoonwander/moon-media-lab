@@ -298,7 +298,12 @@ def command_learn_voice(args: argparse.Namespace) -> int:
 
 
 def command_voice_assets(args: argparse.Namespace) -> int:
-    from moon_media_lab.assets.voices import list_voice_assets, load_voice_asset
+    from moon_media_lab.assets.voices import (
+        approve_voice_asset,
+        generate_voice_catalog,
+        list_voice_assets,
+        load_voice_asset,
+    )
 
     if args.voices_command == "list":
         rows = list_voice_assets()
@@ -312,6 +317,7 @@ def command_voice_assets(args: argparse.Namespace) -> int:
             print(
                 f"{manifest.get('id', 'unknown'):<28} "
                 f"{manifest.get('status', 'unknown'):<10} "
+                f"{manifest.get('visibility', 'private'):<8} "
                 f"{manifest.get('sourceType', 'unknown')}"
             )
         return 0
@@ -322,6 +328,34 @@ def command_voice_assets(args: argparse.Namespace) -> int:
         payload["profile"] = str(asset.profile)
         payload["reference"] = str(asset.reference)
         print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 0
+    if args.voices_command == "approve":
+        asset = approve_voice_asset(
+            voice_id=args.voice_id,
+            display_name=args.name,
+            summary=args.summary,
+            sample=args.sample,
+            usage_note=args.usage_note,
+            license_name=args.license,
+            attribution=args.attribution,
+            public_release_confirmed=args.public_release_confirmed,
+        )
+        print(asset.directory)
+        return 0
+    if args.voices_command == "preview":
+        output_dir = (
+            Path(args.output_dir)
+            if args.output_dir
+            else get_paths().output / "voice-catalog"
+        )
+        index_path, catalog_path, count = generate_voice_catalog(output_dir=output_dir)
+        print(
+            json.dumps(
+                {"index": str(index_path), "catalog": str(catalog_path), "voices": count},
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
         return 0
     raise InvalidArguments("Unknown voice assets command")
 
@@ -430,6 +464,27 @@ def build_parser() -> argparse.ArgumentParser:
     voices_list.add_argument("--json", action="store_true")
     voices_show = voices_sub.add_parser("show", help="Show one voice asset")
     voices_show.add_argument("voice_id")
+    voices_approve = voices_sub.add_parser(
+        "approve", help="Approve a curated sample for public catalog display"
+    )
+    voices_approve.add_argument("voice_id")
+    voices_approve.add_argument("--name", required=True, help="Public display name")
+    voices_approve.add_argument("--summary", required=True, help="Public voice description")
+    voices_approve.add_argument(
+        "--sample", required=True, help="Curated WAV under the voice asset's samples/"
+    )
+    voices_approve.add_argument("--usage-note", required=True)
+    voices_approve.add_argument("--license", default="All rights reserved")
+    voices_approve.add_argument("--attribution", default="")
+    voices_approve.add_argument(
+        "--public-release-confirmed",
+        action="store_true",
+        help="Confirm rights to publicly display this voice and sample",
+    )
+    voices_preview = voices_sub.add_parser(
+        "preview", help="Build a static catalog from approved public voices"
+    )
+    voices_preview.add_argument("--output-dir")
     voices.set_defaults(func=command_voice_assets)
 
     create = subparsers.add_parser("create", help="Create new media artifacts from assets")

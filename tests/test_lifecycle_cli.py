@@ -6,7 +6,9 @@ import wave
 import pytest
 
 from moon_media_lab.assets.voices import (
+    approve_voice_asset,
     design_voice_asset,
+    generate_voice_catalog,
     import_voice_asset,
     validate_voice_id,
 )
@@ -35,6 +37,13 @@ def _write_voice_asset(lab_home, voice_id="reader-v1"):
         encoding="utf-8",
     )
     with wave.open(str(directory / "reference.wav"), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(24000)
+        handle.writeframes(b"\0\0" * 240)
+    samples = directory / "samples"
+    samples.mkdir()
+    with wave.open(str(samples / "preview.wav"), "wb") as handle:
         handle.setnchannels(1)
         handle.setsampwidth(2)
         handle.setframerate(24000)
@@ -69,6 +78,49 @@ def test_voice_id_requires_versioned_slug():
     assert validate_voice_id("reader-v2") == "reader-v2"
     with pytest.raises(InvalidArguments, match="Invalid voice id"):
         validate_voice_id("Reader")
+
+
+def test_public_approval_is_separate_from_import_authorization(lab_home):
+    _write_voice_asset(lab_home)
+
+    with pytest.raises(InvalidArguments, match="Public release confirmation"):
+        approve_voice_asset(
+            voice_id="reader-v1",
+            display_name="Reader",
+            summary="Warm narration voice",
+            sample="preview.wav",
+            usage_note="Public demo only",
+            public_release_confirmed=False,
+        )
+
+
+def test_public_catalog_excludes_private_data_and_candidates(lab_home):
+    _write_voice_asset(lab_home)
+    candidate = _write_voice_asset(lab_home, "candidate-v1")
+    candidate_manifest = json.loads((candidate / "manifest.json").read_text(encoding="utf-8"))
+    candidate_manifest["status"] = "candidate"
+    (candidate / "manifest.json").write_text(json.dumps(candidate_manifest), encoding="utf-8")
+
+    approve_voice_asset(
+        voice_id="reader-v1",
+        display_name="Moon Reader",
+        summary="Warm narration voice",
+        sample="preview.wav",
+        usage_note="Public demo only",
+        license_name="All rights reserved",
+        public_release_confirmed=True,
+    )
+    output_dir = lab_home / "output" / "voice-catalog"
+    index_path, catalog_path, count = generate_voice_catalog(output_dir=output_dir)
+
+    assert count == 1
+    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+    assert catalog["voices"][0]["id"] == "reader-v1"
+    assert "candidate-v1" not in catalog_path.read_text(encoding="utf-8")
+    assert "referenceText" not in catalog_path.read_text(encoding="utf-8")
+    assert "referenceSha256" not in catalog_path.read_text(encoding="utf-8")
+    assert (output_dir / "audio" / "reader-v1.wav").is_file()
+    assert "Moon Reader" in index_path.read_text(encoding="utf-8")
 
 
 def test_learn_voice_requires_explicit_authorization(lab_home):

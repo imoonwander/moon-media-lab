@@ -106,8 +106,24 @@ moon-media create narration assets/voices/<voice-id>/sample.txt \
 通过人工试听后：
 
 - 把验收样本复制到 `assets/voices/<voice-id>/samples/`。
-- 把 manifest 的 `status` 改为 `approved`。
+- 如果需要对外展示，单独确认该声音和试听样本的公开权利。
 - 冻结 reference、profile 和 SHA-256。更换任一核心输入时升版本。
+
+不要手改 `status`。使用审核命令同时记录公开名称、使用说明、授权标记和
+唯一的公开试听样本：
+
+```bash
+moon-media assets voices approve <voice-id> \
+  --name "对外显示名称" \
+  --summary "不包含真人身份的音色描述" \
+  --sample public-preview.wav \
+  --usage-note "公开试听；复用需另行授权" \
+  --license "All rights reserved" \
+  --public-release-confirmed
+```
+
+`--authorization-confirmed` 只确认可以学习/克隆；
+`--public-release-confirmed` 另行确认可以公开展示音色和指定样本。
 
 ## 6. 生成项目旁白
 
@@ -127,7 +143,27 @@ moon-media create narration path/to/narration.txt \
 <voice-id>.run.json      # 模型、耗时、内存和复现参数
 ```
 
-## 7. 导出给消费者
+## 7. 生成对外预览页
+
+```bash
+moon-media assets voices preview
+```
+
+默认生成：
+
+```text
+output/voice-catalog/
+  index.html
+  catalog.json
+  audio/<voice-id>.wav
+```
+
+目录只收录 `status=approved` 且 `visibility=public` 的资产。生成器只复制审核时
+指定的 `samples/` 文件，并输出去身份化的公开字段；候选资产、reference、
+参考逐字稿、SHA-256 和本机路径不会进入目录。这个目录可以先本地打开，确认后
+再交给任意静态站点托管。
+
+## 8. 导出给消费者
 
 导出包只提供消费所需内容：
 
@@ -142,7 +178,7 @@ exports/<run-id>/
 
 下游项目可以复制导出包，但不得把副本当作音色资产正本，也不应实现克隆模型调用。
 
-## 8. 音频 QC
+## 9. 音频 QC
 
 ```bash
 ffprobe -v error \
@@ -163,14 +199,14 @@ ffmpeg -hide_banner \
 - `timings.json` 的最终 `end` 与 WAV 时长一致。
 - reference SHA-256、profile、seed 和模型版本可追溯。
 
-## 9. 未来 Skill 边界
+## 10. 未来 Skill 边界
 
 未来独立 Skill 可以用自然语言收集参数，再编排已经统一的 lifecycle 命令：
 
 ```text
 moon-media learn voice design ...
 moon-media learn voice clone ...
-moon-media assets voices list|show
+moon-media assets voices list|show|approve|preview
 moon-media create narration ...
 ```
 

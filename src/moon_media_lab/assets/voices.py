@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import re
 import shutil
@@ -75,6 +76,220 @@ def load_voice_asset(voice_id: str, root: Path | None = None) -> VoiceAsset:
         )
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     return VoiceAsset(voice_id, directory, manifest, profile_path, reference_path)
+
+
+def approve_voice_asset(
+    *,
+    voice_id: str,
+    display_name: str,
+    summary: str,
+    sample: str,
+    usage_note: str,
+    public_release_confirmed: bool,
+    license_name: str = "All rights reserved",
+    attribution: str = "",
+    root: Path | None = None,
+) -> VoiceAsset:
+    """Approve a curated voice sample for public catalog display.
+
+    Import authorization only covers learning the voice locally. Public release is
+    deliberately confirmed separately so a collected reference cannot become public
+    by accident.
+    """
+    if not public_release_confirmed:
+        raise InvalidArguments(
+            "Public release confirmation is required.",
+            hint="Verify public display and reuse rights, then pass "
+            "--public-release-confirmed.",
+        )
+    asset = load_voice_asset(voice_id, root=root)
+    display_name = display_name.strip()
+    summary = summary.strip()
+    usage_note = usage_note.strip()
+    license_name = license_name.strip()
+    if not all((display_name, summary, usage_note, license_name)):
+        raise InvalidArguments(
+            "Public name, summary, usage note, and license cannot be empty."
+        )
+
+    sample_path = Path(sample)
+    if sample_path.is_absolute():
+        try:
+            sample_path = sample_path.relative_to(asset.directory)
+        except ValueError as exc:
+            raise InvalidArguments("Public sample must be inside the voice asset directory.") from exc
+    elif sample_path.parts[:1] != ("samples",):
+        sample_path = Path("samples") / sample_path
+    resolved_sample = (asset.directory / sample_path).resolve()
+    samples_root = (asset.directory / "samples").resolve()
+    if samples_root not in resolved_sample.parents or not resolved_sample.is_file():
+        raise InvalidArguments(
+            f"Public sample not found inside samples/: {sample}",
+            hint="Generate and curate a WAV under the asset's samples/ directory first.",
+        )
+    if resolved_sample.suffix.lower() != ".wav":
+        raise InvalidArguments("Public preview sample must be a WAV file.")
+
+    manifest = dict(asset.manifest)
+    manifest.update(
+        {
+            "status": "approved",
+            "visibility": "public",
+            "approvedAt": date.today().isoformat(),
+            "publicRelease": "confirmed-by-operator",
+            "public": {
+                "displayName": display_name,
+                "summary": summary,
+                "language": "zh-CN",
+                "sample": sample_path.as_posix(),
+                "usageNote": usage_note,
+                "license": license_name,
+                "attribution": attribution.strip(),
+            },
+        }
+    )
+    (asset.directory / "manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    return VoiceAsset(asset.voice_id, asset.directory, manifest, asset.profile, asset.reference)
+
+
+def generate_voice_catalog(
+    *, output_dir: Path, root: Path | None = None
+) -> tuple[Path, Path, int]:
+    """Build a de-identified static catalog from explicitly public voice assets."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    audio_dir = output_dir / "audio"
+    audio_dir.mkdir(exist_ok=True)
+    public_assets: list[dict[str, Any]] = []
+
+    for manifest in list_voice_assets(root=root):
+        if manifest.get("status") != "approved" or manifest.get("visibility") != "public":
+            continue
+        public = manifest.get("public")
+        if not isinstance(public, dict):
+            continue
+        voice_id = str(manifest.get("id", ""))
+        try:
+            asset = load_voice_asset(voice_id, root=root)
+        except InvalidArguments:
+            continue
+        sample_relative = Path(str(public.get("sample", "")))
+        sample_path = (asset.directory / sample_relative).resolve()
+        samples_root = (asset.directory / "samples").resolve()
+        if samples_root not in sample_path.parents or not sample_path.is_file():
+            continue
+        public_audio_name = f"{voice_id}{sample_path.suffix.lower()}"
+        shutil.copy2(sample_path, audio_dir / public_audio_name)
+        public_assets.append(
+            {
+                "id": voice_id,
+                "version": manifest.get("version"),
+                "sourceType": manifest.get("sourceType"),
+                "displayName": public.get("displayName", voice_id),
+                "summary": public.get("summary", ""),
+                "language": public.get("language", ""),
+                "usageNote": public.get("usageNote", ""),
+                "license": public.get("license", ""),
+                "attribution": public.get("attribution", ""),
+                "audio": f"audio/{public_audio_name}",
+            }
+        )
+
+    catalog_path = output_dir / "catalog.json"
+    catalog_path.write_text(
+        json.dumps(
+            {"generatedAt": date.today().isoformat(), "voices": public_assets},
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    index_path = output_dir / "index.html"
+    index_path.write_text(_render_voice_catalog(public_assets), encoding="utf-8")
+    return index_path, catalog_path, len(public_assets)
+
+
+def _render_voice_catalog(voices: list[dict[str, Any]]) -> str:
+    cards = []
+    for voice in voices:
+        source_label = (
+            "合成设计音色" if voice["sourceType"] == "voice-design" else "授权克隆音色"
+        )
+        attribution = voice.get("attribution")
+        attribution_html = (
+            f'<p class="meta"><span>署名</span>{html.escape(str(attribution))}</p>'
+            if attribution
+            else ""
+        )
+        cards.append(
+            f"""
+            <article class="voice-card">
+              <div class="card-top">
+                <div>
+                  <p class="eyebrow">{html.escape(source_label)} · {html.escape(str(voice['language']))}</p>
+                  <h2>{html.escape(str(voice['displayName']))}</h2>
+                </div>
+                <span class="version">{html.escape(str(voice['id']))}</span>
+              </div>
+              <p class="summary">{html.escape(str(voice['summary']))}</p>
+              <audio controls preload="metadata" src="{html.escape(str(voice['audio']))}"></audio>
+              <div class="details">
+                <p class="meta"><span>使用说明</span>{html.escape(str(voice['usageNote']))}</p>
+                <p class="meta"><span>授权标记</span>{html.escape(str(voice['license']))}</p>
+                {attribution_html}
+              </div>
+            </article>
+            """
+        )
+    cards_html = "\n".join(cards) or (
+        '<div class="empty">还没有通过公开审核的音色。先完成试听样本和公开权利确认。</div>'
+    )
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Moon Voice Library</title>
+  <style>
+    :root {{ color-scheme: dark; --bg:#080b0f; --panel:#11161d; --line:#27313d;
+      --text:#f2f5f7; --muted:#97a3af; --accent:#b8ff5a; }}
+    * {{ box-sizing:border-box; }}
+    body {{ margin:0; min-height:100vh; background:radial-gradient(circle at 80% 0,#18221c 0,transparent 34%),var(--bg); color:var(--text); font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }}
+    main {{ width:min(980px,calc(100% - 32px)); margin:0 auto; padding:72px 0 80px; }}
+    header {{ margin-bottom:40px; }}
+    .brand {{ color:var(--accent); font:700 12px/1.2 ui-monospace,SFMono-Regular,monospace; letter-spacing:.18em; text-transform:uppercase; }}
+    h1 {{ max-width:700px; margin:16px 0 14px; font-size:clamp(38px,7vw,72px); line-height:.96; letter-spacing:-.055em; }}
+    .intro {{ max-width:620px; color:var(--muted); font-size:17px; line-height:1.7; }}
+    .catalog {{ display:grid; gap:18px; }}
+    .voice-card {{ padding:26px; border:1px solid var(--line); border-radius:18px; background:linear-gradient(145deg,rgba(20,27,34,.96),rgba(12,16,21,.96)); box-shadow:0 18px 50px rgba(0,0,0,.2); }}
+    .card-top {{ display:flex; justify-content:space-between; align-items:flex-start; gap:20px; }}
+    .eyebrow,.version {{ margin:0; color:var(--accent); font:600 11px/1.4 ui-monospace,SFMono-Regular,monospace; letter-spacing:.08em; text-transform:uppercase; }}
+    h2 {{ margin:8px 0 0; font-size:27px; letter-spacing:-.025em; }}
+    .version {{ color:var(--muted); padding:5px 9px; border:1px solid var(--line); border-radius:99px; text-transform:none; white-space:nowrap; }}
+    .summary {{ color:#c8d0d7; line-height:1.7; margin:22px 0 18px; }}
+    audio {{ width:100%; height:42px; }}
+    .details {{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:20px; }}
+    .meta {{ margin:0; color:var(--muted); font-size:13px; line-height:1.55; }}
+    .meta span {{ display:block; margin-bottom:4px; color:#d8dee4; font-weight:650; }}
+    .empty {{ padding:36px; border:1px dashed var(--line); border-radius:18px; color:var(--muted); text-align:center; }}
+    footer {{ margin-top:28px; color:#66717c; font:12px/1.5 ui-monospace,SFMono-Regular,monospace; }}
+    @media (max-width:640px) {{ main {{ padding-top:48px; }} .card-top {{ display:block; }} .version {{ display:inline-block; margin-top:14px; }} .details {{ grid-template-columns:1fr; }} }}
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="brand">Moon · Voice Assets</div>
+      <h1>让声音成为可复用的创作资产。</h1>
+      <p class="intro">这里仅展示已经完成试听、权利确认与公开审核的版本。原始参考音、参考逐字稿和内部生成参数不会出现在公开目录中。</p>
+    </header>
+    <section class="catalog">{cards_html}</section>
+    <footer>Generated by moon-media-lab · {date.today().isoformat()} · {len(voices)} public voice(s)</footer>
+  </main>
+</body>
+</html>
+"""
 
 
 def import_voice_asset(

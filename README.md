@@ -112,7 +112,7 @@ post-processing outputs. The job folder is the API — nothing else to learn.
 |---------|---------|
 | `doctor` | Health report: ffmpeg, engines, LLM CLIs, models, verdict |
 | `learn media\|voice` | Learn from media or a voice source and retain the result |
-| `assets voices list\|show` | Inspect versioned voice assets |
+| `assets voices list\|show\|approve\|preview` | Inspect, approve, and preview voice assets |
 | `create narration` | Create narration and sentence timings from a voice asset |
 | `transcribe <source>` | Turn a file/URL into a transcript job |
 | `resume <job-dir>` | Continue an interrupted transcribe job |
