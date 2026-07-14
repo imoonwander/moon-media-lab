@@ -4,17 +4,18 @@ The first public interface should be CLI-only.
 
 ## Command Model
 
-The primary user-facing lifecycle is:
+The media knowledge lifecycle is:
 
 ```text
-moon-media learn ...
-moon-media assets ...
-moon-media create ...
+moon-media learn media ...
+moon-media process ...
+moon-media package ...
+moon-media export wiki ...
 ```
 
-Low-level commands (`transcribe`, `process`, `tts`, `models`) remain stable for scripts and
-advanced use. The standalone `moon-media-voice-case` entry point is a compatibility tool; new
-workflows should use `moon-media learn voice` and `moon-media create narration`.
+Low-level commands (`transcribe`, `process`, `models`) remain stable for scripts and advanced
+use. Voice commands remain compatibility interfaces and load `moon-voice-lab` when installed;
+new voice-only workflows should use `moon-voice` directly.
 
 ### learn
 
@@ -51,7 +52,7 @@ moon-media create narration narration.txt \
   --output-dir output/voice-runs/episode-001
 ```
 
-Future extensions may add `create video` and `remix`, but those should call downstream adapters.
+The command is retained during migration; creation ownership moves to `moon-voice-lab`.
 
 ## Compatibility Commands
 

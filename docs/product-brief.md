@@ -6,7 +6,7 @@
 
 ## One-line Positioning
 
-A local-first, open-source media learning and creation system: ingest sources, learn from them, retain reusable assets, and create derivative media outputs.
+A local-first, open-source media knowledge system: ingest audio/video sources and turn them into evidence-linked transcripts, structured knowledge, reports and portable Wiki assets.
 
 ## Why This Exists
 
@@ -26,14 +26,17 @@ The user does not only want raw transcription. The useful output is:
 - knowledge cards
 - English study notes
 - reusable Skill/SOP drafts
-- optional voice output from text
+- role-oriented and polished English transcript editions
+- claims, evidence, concepts, entities and relations
+- evidence-bound recommendation reports
+- portable Markdown + JSON Wiki exports
 
 ## Product Boundaries
 
 `moon_media_lab` is not just an ASR wrapper. Its product lifecycle is:
 
 ```text
-learn -> assets -> create/remix -> export
+ingest -> transcribe -> organize -> understand -> package -> export
 ```
 
 It should own:
@@ -42,18 +45,18 @@ It should own:
 - ASR routing
 - transcript normalization
 - post-processing hooks
-- TTS routing
-- reusable voice and media asset registries
-- creation/export adapters for downstream projects
+- reusable media knowledge manifests
+- structured knowledge and recommendation post-processors
+- vendor-neutral Wiki and derivative export adapters
 - job storage
 - export formats
 
 It should not own:
 
-- permanent knowledge base UI in v1
+- permanent knowledge base UI or database in v1
 - full desktop GUI in v1
 - cloud account management in v1
-- model fine-tuning/training in v1 (zero-shot voice conditioning is supported)
+- TTS/voice implementation as a core responsibility (`moon-voice-lab` owns it)
 - final video rendering in core (delegate through a future adapter)
 
 ## Users

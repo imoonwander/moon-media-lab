@@ -6,7 +6,16 @@ from typing import Any, Literal
 
 Language = Literal["auto", "zh", "en", "mixed"]
 MediaKind = Literal["file", "url", "text"]
-RunMode = Literal["transcript", "knowledge", "english-study", "skill"]
+RunMode = Literal[
+    "transcript",
+    "knowledge",
+    "english-study",
+    "skill",
+    "speaker-notes",
+    "english-transcript",
+    "structured-knowledge",
+    "recommendations",
+]
 
 
 @dataclass(frozen=True)

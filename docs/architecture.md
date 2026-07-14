@@ -9,7 +9,7 @@ Learn
     |
     v
 Assets
-  jobs / knowledge artifacts / voice registry
+  source / transcript / knowledge / derivative asset layers
     |
     v
 Create
@@ -65,7 +65,7 @@ Optional Knowledge Visualization
     |
     v
 Asset Registry / Creation
-  approved voices -> narration + timings + manifest
+  optional moon-voice-lab plugin -> narration + timings + safe manifest
 ```
 
 ## Layer Responsibilities
@@ -75,16 +75,17 @@ Asset Registry / Creation
 Expose lifecycle commands (`learn`, `assets`, `create`) and compatibility expert commands
 (`transcribe`, `process`, `tts`, `models`). It should not know model-specific details.
 
-### Asset Registry
+### Knowledge Asset Registry
 
-Own reusable, versioned assets separately from one-off job output. Voice assets contain a
-manifest, profile, reference, and approved samples. Private asset contents stay ignored by Git.
+Own portable four-layer knowledge bundles separately from one-off execution state. The bundle
+manifest records source, transcript, knowledge and derivative artifacts with SHA-256 and
+provenance. Files remain authoritative; SQLite and embeddings are deferred.
 
-### Creation Adapters
+### Optional Voice Adapter
 
-Consume approved assets and produce derivative artifacts. Core currently creates narration and
-sentence timings. Future video creation should delegate to a downstream adapter rather than
-embedding a video renderer in the media engine layer.
+Voice design, cloning, catalogs and narration are moving to `moon-voice-lab`. Compatibility
+commands remain and load the plugin lazily; the knowledge core must never import heavy TTS/ML
+libraries at startup. Video rendering remains downstream in `moon-video-cast`.
 
 ### Media Resolver
 

@@ -2,8 +2,9 @@
 
 **English · [简体中文](README.zh-CN.md)**
 
-Local-first media lab: turn audio, video, and online media into
-transcripts, subtitles, knowledge notes, study material — and voice.
+Local-first media knowledge lab: turn local or online audio/video into
+evidence-linked transcripts, speaker/English editions, structured knowledge,
+recommendation reports, diagrams, and portable Wiki-ready bundles.
 
 ```text
 file / YouTube / Bilibili / Douyin / direct URL
@@ -12,16 +13,16 @@ file / YouTube / Bilibili / Douyin / direct URL
   transcribe (SenseVoice · Paraformer+CAM++ · faster-whisper)
         │
         ▼
-  transcript.md + segments.srt/vtt  (timestamps, speakers)
+  Source: raw segments + subtitles + media evidence
         │
         ▼
-  process (any LLM CLI you already have)
+  Transcript: source / clean / speaker / polished English editions
         │
         ▼
-  knowledge.md · english-study.md · skill-draft.md · transcript.clean.md
+  Knowledge: concepts / claims / evidence / entities / recommendations
         │
         ▼
-  optional Codex gpt-image-2 → knowledge diagram + provenance
+  Derivatives: diagram / Wiki export / article and video inputs
 ```
 
 Speech recognition runs **entirely on your machine**. LLM post-processing
@@ -48,9 +49,14 @@ is opt-in and goes through whichever CLI you already use (`claude`,
 - **Subtitles** — `segments.srt` / `segments.vtt` for every job
 - **LLM post-processing** — summary/outline/knowledge cards, English
   study notes, SOP drafts, batched+concurrent transcript cleanup
+- **Knowledge bundles** — four-layer manifests with artifact hashes and provenance
+- **Structured knowledge** — concepts, claims, evidence, entities, relations, open questions
+- **Recommendation reports** — evidence timestamps, conditions, risks, confidence, inference origin
+- **Wiki export** — vendor-neutral Markdown + JSON; no database required
 - **Knowledge visualization** — Codex built-in `imagegen` / gpt-image-2 turns a
   reviewed `knowledge.md` into a diagram with its prompt and provenance
-- **TTS** — `moon-media tts` via Edge neural voices
+- **Optional voice plugin** — compatibility commands remain while voice design,
+  cloning, catalogs, and narration move to `moon-voice-lab`
 - **Self-contained models** — `models list|download|prune`, resumable
   downloads, `--mirror` for hf-mirror.com; nothing writes to `~/.cache`
 - **Web UI (beta preview)** — `moon-media serve` starts a local web app
@@ -66,7 +72,7 @@ Requires Python 3.9+ (3.10+ recommended) and [ffmpeg](https://ffmpeg.org).
 ```bash
 git clone <repo-url> && cd moon_media_lab
 python3 -m venv .venv
-.venv/bin/pip install -e '.[asr-sensevoice,asr-whisper,url,tts-edge]'
+.venv/bin/pip install -e '.[asr-sensevoice,asr-whisper,url]'
 .venv/bin/moon-media doctor   # health report: what's ready, what's next
 ```
 
@@ -79,7 +85,7 @@ Pick only the extras you need — the base CLI has zero dependencies.
 **Global install** (use `moon-media` from anywhere):
 
 ```bash
-pipx install 'moon-media-lab[asr-sensevoice,asr-whisper,url,tts-edge]'
+pipx install 'moon-media-lab[asr-sensevoice,asr-whisper,url]'
 # or, from a clone: ln -s "$(pwd)/.venv/bin/moon-media" ~/.local/bin/moon-media
 ```
 For URL ingestion a standalone `yt-dlp` binary on PATH is preferred
@@ -101,6 +107,10 @@ MOON_MEDIA_LAB_COOKIES_BROWSER=chrome \
 
 # post-process a finished job with the LLM CLI you already have
 .venv/bin/moon-media process jobs/transcribe-... --mode knowledge --clean --llm codex-cli
+.venv/bin/moon-media process jobs/transcribe-... --mode structured-knowledge --llm codex-cli
+.venv/bin/moon-media process jobs/transcribe-... --mode recommendations --llm codex-cli
+.venv/bin/moon-media package jobs/transcribe-...
+.venv/bin/moon-media export wiki jobs/transcribe-...
 
 # or do all of the above from a browser
 .venv/bin/pip install -e '.[web]'
@@ -118,6 +128,8 @@ post-processing outputs. The job folder is the API — nothing else to learn.
 | `doctor` | Health report: ffmpeg, engines, LLM CLIs, models, verdict |
 | `learn media\|voice` | Learn from media or a voice source and retain the result |
 | `assets voices list\|show\|approve\|preview` | Inspect, approve, and preview voice assets |
+| `package <job-dir>` | Build the four-layer knowledge asset manifest |
+| `export wiki <job-dir>` | Export portable Markdown + JSON knowledge assets |
 | `create narration` | Create narration and sentence timings from a voice asset |
 | `transcribe <source>` | Turn a file/URL into a transcript job |
 | `resume <job-dir>` | Continue an interrupted transcribe job |

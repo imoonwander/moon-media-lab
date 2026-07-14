@@ -1,6 +1,6 @@
 # Moon Media Lab 核心功能与操作手册
 
-`moon-media-lab` 是本地优先的媒体与语音处理底座：把文件、在线媒体和文本加工成转录、字幕、知识文档、普通 TTS、音色资产和旁白素材包。
+`moon-media-lab` 是本地优先的媒体知识提炼底座：把文件和在线媒体加工成源文稿、整理稿、角色稿、英文稿、结构化知识、推荐报告、信息图和可导入 Wiki 的资产包。声音命令在迁移期兼容保留，长期实现归 `moon-voice-lab`。
 
 它不负责最终视频渲染。`moon-video-cast` 等下游项目只消费导出的音频与时间轴。
 
@@ -16,6 +16,8 @@
 | 断点恢复 | 中断 job | `moon-media resume` | 从 chunk checkpoint 继续 |
 | LLM 后处理 | 完成的 job | `moon-media process` | 知识笔记、清理稿、学习材料、SOP |
 | 知识可视化 | `knowledge.md` | Codex `imagegen` / gpt-image-2 | 信息结构图、prompt、provenance |
+| 知识资产化 | 完成的 job | `moon-media package` | 四层 manifest、hash、provenance |
+| Wiki 导出 | 知识 job | `moon-media export wiki` | Markdown + JSON 可移植资产包 |
 | 模型管理 | 模型名称 | `moon-media models` | 项目本地模型与缓存 |
 | 普通 TTS | 文本 | `moon-media tts` | Edge TTS 音频 |
 | 音色资产库 | 已验收音色 | `assets/voices/` | profile、manifest、reference、samples |
@@ -27,7 +29,7 @@
 本地文件 / 在线媒体 → ASR job → transcript + subtitles → 可选 LLM 后处理
   → knowledge.md → 可选 Codex gpt-image-2 信息结构图
 
-文本 / 音色描述 / 授权参考音频
+兼容期可选声音插件：文本 / 音色描述 / 授权参考音频
   → TTS / VoiceDesign / VoiceClone
   → assets/voices 音色正本
   → narration + timings + manifest

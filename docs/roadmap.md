@@ -5,7 +5,7 @@
 Each minor series is one product theme. `main` is the CLI core line;
 big themes incubate on feature branches and merge as their own series.
 
-### 0.1.x — CLI core (current focus, branch: `main`)
+### 0.1.x — CLI transcription core
 
 Goal: **the CLI converts video/audio excellently, is open-source ready,
 and works globally on your machine.**
@@ -23,7 +23,20 @@ and works globally on your machine.**
 - Note: the built-in web UI (`moon-media serve`) ships in 0.1.x as a
   **beta preview**; its active development moved to the `web-ui` branch.
 
-### 0.2.x — Web experience (branch: `web-ui`)
+### 0.2.x — Knowledge asset protocol (current `main`)
+
+Goal: **one source becomes a portable four-layer knowledge bundle.**
+
+- [x] Source / Transcript / Knowledge / Derivative manifest with SHA-256
+- [x] Clean, speaker-oriented and polished English transcript editions
+- [x] Structured concepts, claims, evidence, entities and relations
+- [x] Evidence-bound recommendation reports
+- [x] Vendor-neutral Markdown + JSON Wiki export
+- [x] Voice implementation isolated behind an optional plugin adapter
+- [ ] Validate the protocol on three real sources and freeze schema v0.1
+- SQLite and embeddings are explicitly deferred; files remain authoritative
+
+### Web experience (branch: `web-ui`, schedule after protocol validation)
 
 Goal: a web UI whose interaction quality matches the CLI's capability.
 
@@ -32,11 +45,11 @@ Goal: a web UI whose interaction quality matches the CLI's capability.
 - Job management refinements, richer progress, mobile-friendly layout
 - Merges back to `main` and releases as the 0.2.x series when ready
 
-### 0.3.x — Voice and beyond
+### Voice line — moved to moon-voice-lab
 
-- TTS as a real product line (edge-tts shipped early and idles in 0.1.x;
-  it graduates here: voices, batch narration, transcript-to-speech)
-- Reader/knowledge deepening, integrations (e.g. Lark), API providers
+- TTS, voice design/clone, catalogs and narration now graduate into the independent
+  `moon-voice-lab` project. Compatibility commands remain during migration.
+- Reader/knowledge deepening, Wiki adapters and API providers remain here.
 - Later themes each get their own minor series (0.4.x, ...)
 
 ## Branching

@@ -11,7 +11,13 @@ from pathlib import Path
 from moon_media_lab.errors import InvalidArguments
 from moon_media_lab.jobs import append_log, update_state, write_json
 from moon_media_lab.llm.base import LLMProvider
-from moon_media_lab.postproc.prompts import CLEANUP, MODE_PROMPTS, SPEAKER_NAMING, SYSTEM
+from moon_media_lab.postproc.prompts import (
+    CLEANUP,
+    MODE_PROMPTS,
+    SPEAKER_NAMING,
+    STRUCTURED_SYSTEM,
+    SYSTEM,
+)
 from moon_media_lab.schema import (
     TranscriptMeta,
     TranscriptResult,
@@ -22,6 +28,10 @@ MODE_FILES = {
     "knowledge": "knowledge.md",
     "english-study": "english-study.md",
     "skill": "skill-draft.md",
+    "speaker-notes": "transcript.speakers.md",
+    "english-transcript": "transcript.en.clean.md",
+    "structured-knowledge": "knowledge.structured.json",
+    "recommendations": "recommendations.md",
 }
 
 # Cleanup batches keep each LLM call small enough to stay accurate.
@@ -85,9 +95,55 @@ def generate_mode_doc(
     filename = MODE_FILES[mode]
     _progress(f"generating {filename} with {provider.name}...")
     prompt = MODE_PROMPTS[mode].format(transcript=transcript_as_text(result))
-    response = provider.complete(prompt, system=SYSTEM)
+    response = provider.complete(
+        prompt,
+        system=STRUCTURED_SYSTEM if mode == "structured-knowledge" else SYSTEM,
+    )
     output = job_dir / filename
-    output.write_text(response.text + "\n", encoding="utf-8")
+    if mode == "structured-knowledge":
+        raw = response.text.strip().strip("`")
+        if raw.startswith("json"):
+            raw = raw[4:].lstrip()
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise InvalidArguments(
+                f"Structured knowledge returned non-JSON output: {response.text[:200]}"
+            ) from exc
+        required = {
+            "summary",
+            "concepts",
+            "claims",
+            "evidence",
+            "entities",
+            "relations",
+            "openQuestions",
+        }
+        missing = sorted(required - set(payload))
+        if missing:
+            raise InvalidArguments(f"Structured knowledge is missing fields: {', '.join(missing)}")
+        for field in required - {"summary"}:
+            if not isinstance(payload[field], list):
+                raise InvalidArguments(f"Structured knowledge field must be an array: {field}")
+        for field in ("concepts", "claims", "evidence", "entities", "relations", "openQuestions"):
+            for index, item in enumerate(payload[field]):
+                if not isinstance(item, dict) or not item.get("timestamps"):
+                    raise InvalidArguments(
+                        f"Structured knowledge {field}[{index}] lacks source timestamps"
+                    )
+        claim_ids = {item.get("id") for item in payload["claims"]}
+        dangling = [
+            item.get("id", "unknown")
+            for item in payload["evidence"]
+            if item.get("claimId") not in claim_ids
+        ]
+        if dangling:
+            raise InvalidArguments(
+                f"Structured evidence references unknown claims: {', '.join(dangling)}"
+            )
+        write_json(output, payload)
+    else:
+        output.write_text(response.text + "\n", encoding="utf-8")
     _provenance(response.provider, response.cloud, job_dir, filename)
     append_log(job_dir, f"postproc {filename} done provider={response.provider}")
     return output

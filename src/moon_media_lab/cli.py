@@ -4,7 +4,6 @@ import argparse
 import importlib.util
 import json
 import sys
-from datetime import datetime
 from pathlib import Path
 
 from moon_media_lab import __version__
@@ -15,7 +14,6 @@ from moon_media_lab.pipelines.transcribe import (
     resume_transcription,
     run_transcription,
 )
-from moon_media_lab.tts.registry import get_tts_engine
 
 # Engine name -> importable package that proves the engine group is installed.
 # Checked with find_spec so doctor never triggers heavy ML imports.
@@ -67,6 +65,9 @@ def _doctor_payload(engine: str | None) -> dict:
         },
         "llm_clis": {name: shutil.which(name) is not None for name, _p in _LLM_CLIS},
     }
+    from moon_media_lab.plugins.voice import backend_name
+
+    payload["voice_backend"] = backend_name()
     try:
         from moon_media_lab import models_cli
 
@@ -107,6 +108,8 @@ def command_doctor(args: argparse.Namespace) -> int:
         print(f"    {mark} {label}")
         if not installed:
             print(f"        └ {tail}")
+    print(f"    {ok if payload['voice_backend'] == 'moon-voice-lab' else warn} Voice plugin")
+    print(f"        └ backend: {payload['voice_backend']} (legacy commands remain compatible)")
 
     print("\n  LLM CLI (用于知识笔记/清理，任选其一)")
     any_llm = False
@@ -189,7 +192,10 @@ def command_process(args: argparse.Namespace) -> int:
     if not (args.name_speakers or args.clean or args.mode):
         raise InvalidArguments(
             "Nothing to do.",
-            hint="Pass --mode knowledge|english-study|skill, --clean, and/or --name-speakers.",
+            hint=(
+                "Pass --mode knowledge|speaker-notes|english-transcript|"
+                "structured-knowledge|recommendations, --clean, and/or --name-speakers."
+            ),
         )
     import time as _time
 
@@ -259,54 +265,25 @@ def command_serve(args: argparse.Namespace) -> int:
 
 
 def command_tts(args: argparse.Namespace) -> int:
-    paths = get_paths()
-    paths.ensure()
-    text = args.text
-    source = Path(args.text)
-    if source.exists() and source.is_file():
-        text = source.read_text(encoding="utf-8")
-    output_path = Path(args.output) if args.output else paths.output / "mock-tts.txt"
-    engine = get_tts_engine(args.engine)
-    result_path = engine.synthesize(text, output_path, voice=args.voice)
-    print(result_path)
+    from moon_media_lab.plugins.voice import synthesize
+
+    print(synthesize(args))
     return 0
 
 
 def command_learn_voice(args: argparse.Namespace) -> int:
-    from moon_media_lab.assets.voices import design_voice_asset, import_voice_asset
+    from moon_media_lab.plugins.voice import learn
 
-    if args.voice_learn_command == "clone":
-        transcript = args.transcript
-        if args.transcript_file:
-            transcript = Path(args.transcript_file).read_text(encoding="utf-8")
-        asset = import_voice_asset(
-            source=Path(args.source),
-            transcript=transcript,
-            voice_id=args.voice_id,
-            authorization_confirmed=args.authorization_confirmed,
-        )
-    elif args.voice_learn_command == "design":
-        asset = design_voice_asset(
-            voice_id=args.voice_id,
-            description=args.description,
-            reference_text=args.reference_text,
-        )
-    else:
-        raise InvalidArguments("Unknown learn voice command")
-    print(asset.directory)
+    print(learn(args))
     return 0
 
 
 def command_voice_assets(args: argparse.Namespace) -> int:
-    from moon_media_lab.assets.voices import (
-        approve_voice_asset,
-        generate_voice_catalog,
-        list_voice_assets,
-        load_voice_asset,
-    )
+    from moon_media_lab.plugins.voice import assets
 
+    payload = assets(args)
     if args.voices_command == "list":
-        rows = list_voice_assets()
+        rows = payload
         if args.json:
             print(json.dumps(rows, ensure_ascii=False, indent=2))
             return 0
@@ -322,63 +299,36 @@ def command_voice_assets(args: argparse.Namespace) -> int:
             )
         return 0
     if args.voices_command == "show":
-        asset = load_voice_asset(args.voice_id)
-        payload = dict(asset.manifest)
-        payload["directory"] = str(asset.directory)
-        payload["profile"] = str(asset.profile)
-        payload["reference"] = str(asset.reference)
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return 0
     if args.voices_command == "approve":
-        asset = approve_voice_asset(
-            voice_id=args.voice_id,
-            display_name=args.name,
-            summary=args.summary,
-            sample=args.sample,
-            usage_note=args.usage_note,
-            license_name=args.license,
-            attribution=args.attribution,
-            public_release_confirmed=args.public_release_confirmed,
-        )
-        print(asset.directory)
+        print(payload)
         return 0
     if args.voices_command == "preview":
-        output_dir = (
-            Path(args.output_dir)
-            if args.output_dir
-            else get_paths().output / "voice-catalog"
-        )
-        index_path, catalog_path, count = generate_voice_catalog(output_dir=output_dir)
-        print(
-            json.dumps(
-                {"index": str(index_path), "catalog": str(catalog_path), "voices": count},
-                ensure_ascii=False,
-                indent=2,
-            )
-        )
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
         return 0
     raise InvalidArguments("Unknown voice assets command")
 
 
 def command_create_narration(args: argparse.Namespace) -> int:
-    from moon_media_lab.assets.voices import load_voice_asset
-    from moon_media_lab.tts.video_case import run_case
+    from moon_media_lab.plugins.voice import narration
 
-    asset = load_voice_asset(args.voice)
-    output_dir = (
-        Path(args.output_dir)
-        if args.output_dir
-        else get_paths().output
-        / "voice-runs"
-        / f"narration-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-    )
-    result = run_case(
-        text_file=Path(args.text_file),
-        profile_file=asset.profile,
-        output_dir=output_dir,
-        reference_audio=asset.reference,
-    )
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    print(json.dumps(narration(args), ensure_ascii=False, indent=2))
+    return 0
+
+
+def command_package(args: argparse.Namespace) -> int:
+    from moon_media_lab.knowledge import build_knowledge_bundle
+
+    print(build_knowledge_bundle(Path(args.job_dir)))
+    return 0
+
+
+def command_export_wiki(args: argparse.Namespace) -> int:
+    from moon_media_lab.knowledge import export_wiki_bundle
+
+    output = Path(args.output_dir) if args.output_dir else Path(args.job_dir) / "exports" / "wiki"
+    print(export_wiki_bundle(Path(args.job_dir), output))
     return 0
 
 
@@ -425,14 +375,16 @@ def build_parser() -> argparse.ArgumentParser:
     _add_transcribe_arguments(transcribe)
     transcribe.set_defaults(func=command_transcribe)
 
-    learn = subparsers.add_parser("learn", help="Turn media or voices into reusable knowledge assets")
+    learn = subparsers.add_parser("learn", help="Ingest media into transcript and knowledge jobs")
     learn_sub = learn.add_subparsers(dest="learn_command", required=True)
     learn_media = learn_sub.add_parser(
         "media", help="Ingest media and learn its transcript/knowledge"
     )
     _add_transcribe_arguments(learn_media)
     learn_media.set_defaults(func=command_transcribe)
-    learn_voice = learn_sub.add_parser("voice", help="Learn a reusable voice asset")
+    learn_voice = learn_sub.add_parser(
+        "voice", help="Compatibility voice command; implementation is moving to moon-voice-lab"
+    )
     learn_voice_sub = learn_voice.add_subparsers(dest="voice_learn_command", required=True)
     learn_voice_clone = learn_voice_sub.add_parser(
         "clone", help="Learn from an explicitly authorized voice reference"
@@ -456,9 +408,11 @@ def build_parser() -> argparse.ArgumentParser:
     learn_voice_design.add_argument("--reference-text", required=True)
     learn_voice_design.set_defaults(func=command_learn_voice)
 
-    assets = subparsers.add_parser("assets", help="Inspect reusable learned assets")
+    assets = subparsers.add_parser("assets", help="Inspect reusable assets")
     assets_sub = assets.add_subparsers(dest="assets_type", required=True)
-    voices = assets_sub.add_parser("voices", help="Manage the local voice asset library")
+    voices = assets_sub.add_parser(
+        "voices", help="Compatibility voice registry backed by the optional voice plugin"
+    )
     voices_sub = voices.add_subparsers(dest="voices_command", required=True)
     voices_list = voices_sub.add_parser("list", help="List voice assets")
     voices_list.add_argument("--json", action="store_true")
@@ -487,7 +441,7 @@ def build_parser() -> argparse.ArgumentParser:
     voices_preview.add_argument("--output-dir")
     voices.set_defaults(func=command_voice_assets)
 
-    create = subparsers.add_parser("create", help="Create new media artifacts from assets")
+    create = subparsers.add_parser("create", help="Compatibility creation adapters")
     create_sub = create.add_subparsers(dest="create_command", required=True)
     create_narration = create_sub.add_parser(
         "narration", help="Create narration and timings from an approved voice asset"
@@ -509,7 +463,15 @@ def build_parser() -> argparse.ArgumentParser:
     process.add_argument("job_dir", help="Path to the jobs/transcribe-... folder")
     process.add_argument(
         "--mode",
-        choices=["knowledge", "english-study", "skill"],
+        choices=[
+            "knowledge",
+            "english-study",
+            "skill",
+            "speaker-notes",
+            "english-transcript",
+            "structured-knowledge",
+            "recommendations",
+        ],
         help="Generate this document from the transcript",
     )
     process.add_argument(
@@ -522,6 +484,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     process.add_argument("--llm", default="auto", help="LLM provider (claude-cli|mock)")
     process.set_defaults(func=command_process)
+
+    package = subparsers.add_parser(
+        "package", help="Build the four-layer knowledge asset manifest for a media job"
+    )
+    package.add_argument("job_dir")
+    package.set_defaults(func=command_package)
+
+    export = subparsers.add_parser("export", help="Export portable knowledge assets")
+    export_sub = export.add_subparsers(dest="export_command", required=True)
+    export_wiki = export_sub.add_parser("wiki", help="Export Markdown + JSON for a Wiki")
+    export_wiki.add_argument("job_dir")
+    export_wiki.add_argument("--output-dir")
+    export_wiki.set_defaults(func=command_export_wiki)
 
     serve_cmd = subparsers.add_parser("serve", help="Start the local web UI")
     serve_cmd.add_argument("--host", default="127.0.0.1")
@@ -541,7 +516,9 @@ def build_parser() -> argparse.ArgumentParser:
     models_sub.add_parser("prune", help="Remove interrupted download leftovers")
     models.set_defaults(func=command_models)
 
-    tts = subparsers.add_parser("tts", help="Create speech from text using a TTS engine")
+    tts = subparsers.add_parser(
+        "tts", help="Compatibility TTS command; prefer moon-voice for new workflows"
+    )
     tts.add_argument("text", help="Text or local text file path")
     tts.add_argument("--engine", default="auto")
     tts.add_argument("--voice")

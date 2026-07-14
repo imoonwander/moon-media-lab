@@ -2,7 +2,8 @@ import json
 
 from moon_media_lab.jobs import write_json
 from moon_media_lab.llm.providers.mock import MockLLMProvider
-from moon_media_lab.postproc.runner import clean_transcript, load_result
+from moon_media_lab.llm.base import LLMResponse
+from moon_media_lab.postproc.runner import clean_transcript, generate_mode_doc, load_result
 from moon_media_lab.schema import TranscriptMeta, TranscriptResult, TranscriptSegment
 
 
@@ -54,3 +55,29 @@ def test_load_result_roundtrip(lab_home):
     result = load_result(job)
     assert result.segments[0].speaker == "SPEAKER_00"
     assert result.meta.engine == "mock"
+
+
+def test_structured_knowledge_requires_and_writes_json(lab_home):
+    job = lab_home / "jobs" / "transcribe-structured"
+    result = _write_job(job, [TranscriptSegment(start=0.0, end=2.0, text="知识来自证据。")])
+
+    class JSONProvider(MockLLMProvider):
+        def complete(self, prompt, *, system=None):
+            payload = {
+                "summary": "知识来自证据。",
+                "concepts": [],
+                "claims": [],
+                "evidence": [],
+                "entities": [],
+                "relations": [],
+                "openQuestions": [],
+            }
+            return LLMResponse(
+                text=json.dumps(payload, ensure_ascii=False),
+                provider="mock-json",
+                model="mock",
+                cloud=False,
+            )
+
+    output = generate_mode_doc(result, "structured-knowledge", JSONProvider(), job)
+    assert json.loads(output.read_text(encoding="utf-8"))["summary"] == "知识来自证据。"

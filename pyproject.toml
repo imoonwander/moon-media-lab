@@ -1,12 +1,12 @@
 [project]
 name = "moon-media-lab"
-version = "0.1.6"
-description = "Local-first media lab: audio/video/online media to transcripts, subtitles, knowledge notes, and voice."
+version = "0.2.0"
+description = "Local-first media knowledge lab: audio/video/online media to evidence-linked transcripts, knowledge bundles, reports, and Wiki exports."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.9"
 dependencies = []
-keywords = ["asr", "transcription", "whisper", "sensevoice", "diarization", "yt-dlp", "tts"]
+keywords = ["asr", "transcription", "knowledge", "wiki", "whisper", "sensevoice", "diarization"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",

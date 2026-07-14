@@ -2,8 +2,8 @@
 
 **[English](README.md) · 简体中文**
 
-本地优先的媒体实验室：把音频、视频、在线媒体转成转录稿、字幕、
-知识笔记、学习材料——以及语音。
+本地优先的媒体知识提炼工具：把线上或本地音视频转成可核验的源文稿、
+整理稿、角色稿、英文稿、结构化知识、推荐报告、信息结构图和 Wiki-ready 资产包。
 
 ```text
 本地文件 / YouTube / Bilibili / 抖音 / 直链
@@ -12,16 +12,16 @@
   transcribe（SenseVoice · Paraformer+CAM++ · faster-whisper）
         │
         ▼
-  transcript.md + segments.srt/vtt （带时间戳、说话人）
+  Source 层：原始 segments + subtitles + 媒体证据
         │
         ▼
-  process（用你已有的任意 LLM 命令行）
+  Transcript 层：源文稿 / 整理稿 / 角色稿 / 英文整理稿
         │
         ▼
-  knowledge.md · english-study.md · skill-draft.md · transcript.clean.md
+  Knowledge 层：知识笔记 / concepts / claims / evidence / entities / recommendations
         │
         ▼
-  可选：Codex gpt-image-2 → 信息结构图 + provenance
+  Derivative 层：信息结构图 / Wiki 导出 / 文章与视频二创输入
 ```
 
 **语音识别全程在你自己的电脑上运行。** LLM 后处理是可选的，走你本来
@@ -45,9 +45,12 @@
 - **字幕** —— 每个 job 都产出 `segments.srt` / `segments.vtt`
 - **LLM 后处理** —— 摘要/大纲/知识卡片、英语学习笔记、SOP 草稿、
   分批并发的转录稿清理
+- **知识资产包** —— 四层 manifest、SHA-256、LLM provenance、Markdown + JSON Wiki 导出
+- **结构化知识** —— concepts、claims、evidence、entities、relations 和 open questions
+- **推荐报告** —— 每条建议记录证据时间戳、条件、风险、置信度和推导来源
 - **知识可视化** —— 用 Codex 内置 `imagegen` / gpt-image-2 把已确认的
   `knowledge.md` 生成信息结构图，并保存 prompt 与 provenance
-- **TTS 语音合成** —— `moon-media tts`，基于 Edge 神经语音
+- **可选声音插件** —— 兼容保留 `moon-media tts/learn voice/create narration`；新实现逐步迁往 `moon-voice-lab`
 - **自包含模型** —— `models list|download|prune`，断点续传下载，
   `--mirror` 走 hf-mirror.com；绝不写入 `~/.cache`
 - **Web 界面（beta 预览）** —— `moon-media serve` 启动本地网页应用
@@ -119,6 +122,8 @@ MOON_MEDIA_LAB_COOKIES_BROWSER=chrome \
 | `transcribe <源>` | 把文件/链接转成转录 job |
 | `resume <job目录>` | 续跑一个被中断的转录 job |
 | `process <job目录>` | 对完成的 job 做 LLM 后处理 |
+| `package <job目录>` | 生成四层知识资产 `knowledge-bundle.manifest.json` |
+| `export wiki <job目录>` | 导出厂商无关的 Markdown + JSON Wiki 包 |
 | `models list\|download\|prune` | 管理本地 ASR 模型 |
 | `tts <文本>` | 文字转语音（edge-tts） |
 | `moon-media-voice-case` | 底层兼容入口；新流程优先使用上面的生命周期命令 |
@@ -161,6 +166,10 @@ moon-media process <job目录> [--mode ...] [--clean] [--name-speakers] [--llm .
 | `--mode knowledge` | `knowledge.md` | 摘要、带时间戳大纲、知识卡片、金句 |
 | `--mode english-study` | `english-study.md` | 生词、表达、语法点、练习 |
 | `--mode skill` | `skill-draft.md` | 从内容提炼可复用的 SOP/操作指南 |
+| `--mode speaker-notes` | `transcript.speakers.md` | 角色立场、问答、分歧与归属引用 |
+| `--mode english-transcript` | `transcript.en.clean.md` | 保留原意与时间戳的英文整理稿 |
+| `--mode structured-knowledge` | `knowledge.structured.json` | 概念、观点、证据、实体与关系 |
+| `--mode recommendations` | `recommendations.md` | 有证据、条件、风险和置信度的推荐报告 |
 | `--clean` | `transcript.clean.md` | 修同音字、去语气词、加标点（分批、并发、有 checkpoint） |
 | `--name-speakers` | 重写 `transcript.md` + 字幕 | 根据上下文推断 `SPEAKER_NN` 的真名/角色 |
 
@@ -182,7 +191,14 @@ moon-media models prune                         # 清理中断的 .part/.incompl
 模型按文件下载，支持 HTTP-Range 断点续传——中断后重跑会接着下。
 一切落在项目的 `models/` 和 `cache/`；绝不写入 `~/.cache`。
 
-### 本地音色设计 + 视频旁白（Apple Silicon）
+### 可选声音插件与兼容命令
+
+声音能力正在迁往独立项目 `moon-voice-lab`。当前命令不移除；安装新项目后，
+media-lab 会懒加载新后端并继续使用现有资产目录。没有安装时回退到内置旧实现。
+
+迁移契约见 [`docs/voice-plugin-migration.md`](docs/voice-plugin-migration.md)。
+
+#### 本地音色设计 + 视频旁白（Apple Silicon）
 
 可选的 Qwen3-TTS MLX 工作流会先用文字描述设计一段可复用的参考音色，
 再逐句克隆该音色。最终同时写出 WAV 和按真实采样数计算的逐句时间轴，
